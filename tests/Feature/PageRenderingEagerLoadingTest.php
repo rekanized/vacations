@@ -1,0 +1,77 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Absence;
+use App\Models\AbsenceOption;
+use App\Models\AbsenceRequestLog;
+use App\Models\Department;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class PageRenderingEagerLoadingTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_application_pages_render_without_lazy_loading_violations(): void
+    {
+        AbsenceOption::create([
+            'code' => 'S',
+            'label' => 'Vacation',
+            'color' => '#4ade80',
+            'sort_order' => 1,
+        ]);
+
+        $department = Department::create(['name' => 'Engineering']);
+        $manager = $department->users()->create([
+            'name' => 'Maja Manager',
+            'location' => 'Stockholm',
+        ]);
+        $employee = $department->users()->create([
+            'name' => 'Ella Employee',
+            'location' => 'Stockholm',
+            'manager_id' => $manager->id,
+        ]);
+
+        $absence = Absence::create([
+            'user_id' => $employee->id,
+            'type' => 'S',
+            'reason' => 'Planned leave',
+            'status' => Absence::STATUS_PENDING,
+            'request_uuid' => '11111111-1111-1111-1111-111111111111',
+            'date' => '2026-07-01',
+        ]);
+
+        AbsenceRequestLog::create([
+            'request_uuid' => $absence->request_uuid,
+            'user_id' => $employee->id,
+            'actor_id' => $manager->id,
+            'action' => AbsenceRequestLog::ACTION_SUBMITTED,
+            'absence_type' => 'S',
+            'status' => Absence::STATUS_PENDING,
+            'date_start' => '2026-07-01',
+            'date_end' => '2026-07-01',
+            'date_count' => 1,
+            'reason' => 'Planned leave',
+            'metadata' => ['dates' => ['2026-07-01']],
+        ]);
+
+        $this
+            ->withSession(['current_user_id' => $employee->id])
+            ->get(route('planner'))
+            ->assertOk()
+            ->assertSeeText('Ella Employee');
+
+        $this
+            ->withSession(['current_user_id' => $manager->id])
+            ->get(route('admin.index'))
+            ->assertOk()
+            ->assertSeeText('Maja Manager');
+
+        $this
+            ->withSession(['current_user_id' => $manager->id])
+            ->get(route('admin.logs'))
+            ->assertOk()
+            ->assertSeeText('Request log');
+    }
+}

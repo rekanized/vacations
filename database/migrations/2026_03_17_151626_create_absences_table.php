@@ -14,9 +14,18 @@ return new class extends Migration
         Schema::create('absences', function (Illuminate\Database\Schema\Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('type'); // S, FL, B
+            $table->string('type', 20); // S, FL, B
+            $table->string('reason')->nullable();
+            $table->string('status', 30)->default('approved')->index();
+            $table->uuid('request_uuid')->nullable()->index();
+            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('approved_at')->nullable();
             $table->date('date');
             $table->timestamps();
+
+            $table->unique(['user_id', 'date']);
+            $table->index(['user_id', 'status', 'request_uuid', 'date']);
+            $table->index(['request_uuid', 'status', 'date']);
         });
     }
 

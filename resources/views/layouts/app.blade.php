@@ -259,6 +259,26 @@
                 line-height: 1.4;
             }
 
+            .sidebar-footer-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                margin-top: 12px;
+                padding: 10px 14px;
+                border-radius: 16px;
+                color: var(--text-muted);
+                text-decoration: none;
+                font-size: 12px;
+                font-weight: 700;
+                transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+            }
+
+            .sidebar-footer-link:hover {
+                background: rgba(255, 255, 255, 0.72);
+                color: var(--text-main);
+                transform: translateX(2px);
+            }
+
             .app-content {
                 flex: 1;
                 min-width: 0;
@@ -324,10 +344,7 @@
     <body class="bg-slate-50">
         @php
             $applicationName = config('app.name', 'LeaveBoard');
-            $layoutCurrentUser = \App\Models\User::query()
-                ->with(['manager', 'department'])
-                ->find(session('current_user_id'))
-                ?? \App\Models\User::query()->with(['manager', 'department'])->orderBy('id')->first();
+            $layoutCurrentUser = $layoutCurrentUser ?? $currentUser ?? null;
             $layoutInitials = $layoutCurrentUser
                 ? collect(explode(' ', $layoutCurrentUser->name))
                     ->filter()
@@ -395,6 +412,11 @@
                         </span>
                     </div>
                 @endif
+
+                <a href="https://github.com/rekanized/vacations" class="sidebar-footer-link" target="_blank" rel="noopener noreferrer">
+                    <span class="icon">code</span>
+                    <span>GitHub repository</span>
+                </a>
             </aside>
 
             <div class="app-content">

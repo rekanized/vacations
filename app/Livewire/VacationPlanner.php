@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use Livewire\Component;
+use App\Models\AbsenceRequestLog;
 use App\Models\AbsenceOption;
 use App\Models\Department;
 use App\Models\User;
@@ -12,6 +13,7 @@ use App\Support\SwedishHolidayCalendar;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class VacationPlanner extends Component
@@ -132,7 +134,11 @@ class VacationPlanner extends Component
         $this->selectedDepartments = $selectedDepartments;
 
         $currentUser = User::query()
-            ->with('manager')
+            ->select(['id', 'department_id', 'manager_id', 'name', 'location'])
+            ->with([
+                'manager:id,name',
+                'department:id,name',
+            ])
             ->find($this->currentUserId);
 
         $absenceOptions = AbsenceOption::query()
@@ -142,7 +148,9 @@ class VacationPlanner extends Component
 
         $absenceOptionsByCode = $absenceOptions->keyBy('code');
 
-        $departments = Department::with(['users' => function ($query) use ($start, $end, $searchTerm) {
+        $departments = Department::query()
+        ->select(['id', 'name'])
+        ->with(['users' => function ($query) use ($start, $end, $searchTerm) {
             if ($this->selectedSites !== []) {
                 $query->whereIn('location', $this->selectedSites);
             }
@@ -151,14 +159,15 @@ class VacationPlanner extends Component
                 $query->where('name', 'like', "%{$searchTerm}%");
             }
 
-            $query->orderBy('name');
+            $query
+                ->select(['id', 'department_id', 'name', 'location'])
+                ->orderBy('name');
 
             $query->with(['absences' => function ($q) use ($start, $end) {
-                $q->whereBetween('date', [$start->format('Y-m-d'), $end->format('Y-m-d')])
+                $q->select(['id', 'user_id', 'type', 'date', 'reason', 'status', 'request_uuid'])
+                    ->whereBetween('date', [$start->format('Y-m-d'), $end->format('Y-m-d')])
                     ->whereIn('status', [Absence::STATUS_APPROVED, Absence::STATUS_PENDING]);
             }]);
-
-            $query->with('manager');
         }])
         ->when($selectedDepartments !== [], function ($query) use ($selectedDepartments) {
             $query->whereIn('name', $selectedDepartments);
@@ -202,7 +211,9 @@ class VacationPlanner extends Component
             'absenceOptionsByCode' => $absenceOptionsByCode,
             'pendingRequests' => $this->pendingRequestsForCurrentUser(),
             'managerApprovals' => $this->pendingRequestsForManager(),
-        ])->layout('layouts.app');
+        ])->layout('layouts.app', [
+            'layoutCurrentUser' => $currentUser,
+        ]);
     }
 
     public function setAbsenceType(string $type): void
@@ -242,19 +253,39 @@ class VacationPlanner extends Component
         $requestUuid = (string) Str::uuid();
         $trimmedReason = trim($reason) !== '' ? trim($reason) : null;
 
-        foreach ($dates as $date) {
-            Absence::query()->updateOrCreate(
-                ['user_id' => $userId, 'date' => $date],
-                [
-                    'type' => $type,
-                    'reason' => $trimmedReason,
-                    'status' => $status,
-                    'request_uuid' => $requestUuid,
-                    'approved_by' => $status === Absence::STATUS_APPROVED ? $this->currentUserId : null,
-                    'approved_at' => $status === Absence::STATUS_APPROVED ? now() : null,
-                ]
+        DB::transaction(function () use ($dates, $requestUuid, $reason, $status, $trimmedReason, $type, $userId) {
+            $timestamp = now();
+
+            Absence::query()->upsert(
+                collect($dates)
+                    ->map(fn (string $date) => [
+                        'user_id' => $userId,
+                        'date' => $date,
+                        'type' => $type,
+                        'reason' => $trimmedReason,
+                        'status' => $status,
+                        'request_uuid' => $requestUuid,
+                        'approved_by' => $status === Absence::STATUS_APPROVED ? $this->currentUserId : null,
+                        'approved_at' => $status === Absence::STATUS_APPROVED ? $timestamp : null,
+                        'created_at' => $timestamp,
+                        'updated_at' => $timestamp,
+                    ])
+                    ->all(),
+                ['user_id', 'date'],
+                ['type', 'reason', 'status', 'request_uuid', 'approved_by', 'approved_at', 'updated_at']
             );
-        }
+
+            $storedAbsences = Absence::query()
+                ->where('user_id', $userId)
+                ->where('request_uuid', $requestUuid)
+                ->orderBy('date')
+                ->get();
+
+            $this->recordRequestLog('submitted', $storedAbsences, $this->currentUserId, [
+                'approval_flow' => $status === Absence::STATUS_APPROVED ? 'automatic' : 'manager',
+                'submitted_reason' => $reason,
+            ], $status);
+        });
 
         $this->reason = '';
         $this->absenceType = $type;
@@ -274,10 +305,27 @@ class VacationPlanner extends Component
             return;
         }
 
-        Absence::query()
+        $absencesToDelete = Absence::query()
             ->where('user_id', $userId)
             ->whereIn('date', $dates)
-            ->delete();
+            ->orderBy('date')
+            ->get();
+
+        if ($absencesToDelete->isEmpty()) {
+            return;
+        }
+
+        DB::transaction(function () use ($absencesToDelete, $dates, $userId) {
+            Absence::query()
+                ->where('user_id', $userId)
+                ->whereIn('date', $dates)
+                ->delete();
+
+            $this->recordRequestLog('deleted', $absencesToDelete, $this->currentUserId, [
+                'source' => 'planner_grid',
+                'deleted_statuses' => $absencesToDelete->pluck('status')->filter()->unique()->values()->all(),
+            ]);
+        });
     }
 
     public function approveRequest(string $requestUuid): void
@@ -383,41 +431,65 @@ class VacationPlanner extends Component
         $datesToCreate = array_values(array_diff($dates, $existingDates));
         $trimmedReason = trim($this->editingRequestReason) !== '' ? trim($this->editingRequestReason) : null;
 
-        if ($datesToDelete !== []) {
-            Absence::query()
+        $beforeSnapshot = $this->snapshotRequest($requestAbsences);
+
+        DB::transaction(function () use ($beforeSnapshot, $datesToCreate, $datesToDelete, $datesToKeep, $trimmedReason) {
+            if ($datesToDelete !== []) {
+                Absence::query()
+                    ->where('user_id', $this->currentUserId)
+                    ->where('status', Absence::STATUS_PENDING)
+                    ->where('request_uuid', $this->editingRequestUuid)
+                    ->whereIn('date', $datesToDelete)
+                    ->delete();
+            }
+
+            if ($datesToKeep !== []) {
+                Absence::query()
+                    ->where('user_id', $this->currentUserId)
+                    ->where('status', Absence::STATUS_PENDING)
+                    ->where('request_uuid', $this->editingRequestUuid)
+                    ->whereIn('date', $datesToKeep)
+                    ->update([
+                        'type' => $this->editingRequestType,
+                        'reason' => $trimmedReason,
+                        'approved_by' => null,
+                        'approved_at' => null,
+                    ]);
+            }
+
+            if ($datesToCreate !== []) {
+                $timestamp = now();
+
+                Absence::query()->insert(
+                    collect($datesToCreate)
+                        ->map(fn (string $date) => [
+                            'user_id' => $this->currentUserId,
+                            'type' => $this->editingRequestType,
+                            'date' => $date,
+                            'reason' => $trimmedReason,
+                            'status' => Absence::STATUS_PENDING,
+                            'request_uuid' => $this->editingRequestUuid,
+                            'approved_by' => null,
+                            'approved_at' => null,
+                            'created_at' => $timestamp,
+                            'updated_at' => $timestamp,
+                        ])
+                        ->all(),
+                );
+            }
+
+            $updatedAbsences = Absence::query()
                 ->where('user_id', $this->currentUserId)
                 ->where('status', Absence::STATUS_PENDING)
                 ->where('request_uuid', $this->editingRequestUuid)
-                ->whereIn('date', $datesToDelete)
-                ->delete();
-        }
+                ->orderBy('date')
+                ->get();
 
-        if ($datesToKeep !== []) {
-            Absence::query()
-                ->where('user_id', $this->currentUserId)
-                ->where('status', Absence::STATUS_PENDING)
-                ->where('request_uuid', $this->editingRequestUuid)
-                ->whereIn('date', $datesToKeep)
-                ->update([
-                    'type' => $this->editingRequestType,
-                    'reason' => $trimmedReason,
-                    'approved_by' => null,
-                    'approved_at' => null,
-                ]);
-        }
-
-        foreach ($datesToCreate as $date) {
-            Absence::query()->create([
-                'user_id' => $this->currentUserId,
-                'type' => $this->editingRequestType,
-                'date' => $date,
-                'reason' => $trimmedReason,
-                'status' => Absence::STATUS_PENDING,
-                'request_uuid' => $this->editingRequestUuid,
-                'approved_by' => null,
-                'approved_at' => null,
+            $this->recordRequestLog('updated', $updatedAbsences, $this->currentUserId, [
+                'before' => $beforeSnapshot,
+                'after' => $this->snapshotRequest($updatedAbsences),
             ]);
-        }
+        });
 
         $this->absenceType = $this->editingRequestType;
         $this->reason = $this->editingRequestReason;
@@ -434,11 +506,27 @@ class VacationPlanner extends Component
             return;
         }
 
-        $deleted = Absence::query()
-            ->where('user_id', $this->currentUserId)
-            ->where('status', Absence::STATUS_PENDING)
-            ->where('request_uuid', $requestUuid)
-            ->delete();
+        $requestAbsences = $this->pendingRequestAbsencesForCurrentUser($requestUuid);
+
+        if ($requestAbsences->isEmpty()) {
+            return;
+        }
+
+        $deleted = DB::transaction(function () use ($requestAbsences, $requestUuid) {
+            $deleted = Absence::query()
+                ->where('user_id', $this->currentUserId)
+                ->where('status', Absence::STATUS_PENDING)
+                ->where('request_uuid', $requestUuid)
+                ->delete();
+
+            if ($deleted > 0) {
+                $this->recordRequestLog('deleted', $requestAbsences, $this->currentUserId, [
+                    'source' => 'pending_request',
+                ]);
+            }
+
+            return $deleted;
+        });
 
         if ($deleted === 0) {
             return;
@@ -576,7 +664,7 @@ class VacationPlanner extends Component
         }
 
         return Absence::query()
-            ->with('user')
+            ->with('user:id,name')
             ->where('user_id', $this->currentUserId)
             ->where('status', Absence::STATUS_PENDING)
             ->whereNotNull('request_uuid')
@@ -608,7 +696,7 @@ class VacationPlanner extends Component
         }
 
         return Absence::query()
-            ->with(['user', 'user.manager'])
+            ->with('user:id,name,manager_id')
             ->where('status', Absence::STATUS_PENDING)
             ->whereNotNull('request_uuid')
             ->whereHas('user', fn ($query) => $query->where('manager_id', $this->currentUserId))
@@ -665,14 +753,94 @@ class VacationPlanner extends Component
             return;
         }
 
-        Absence::query()
+        $pendingAbsences = Absence::query()
             ->where('request_uuid', $requestUuid)
             ->where('status', Absence::STATUS_PENDING)
             ->whereHas('user', fn ($query) => $query->where('manager_id', $this->currentUserId))
-            ->update([
-                'status' => $status,
-                'approved_by' => $this->currentUserId,
-                'approved_at' => now(),
-            ]);
+            ->orderBy('date')
+            ->get();
+
+        if ($pendingAbsences->isEmpty()) {
+            return;
+        }
+
+        DB::transaction(function () use ($pendingAbsences, $requestUuid, $status) {
+            Absence::query()
+                ->where('request_uuid', $requestUuid)
+                ->where('status', Absence::STATUS_PENDING)
+                ->whereHas('user', fn ($query) => $query->where('manager_id', $this->currentUserId))
+                ->update([
+                    'status' => $status,
+                    'approved_by' => $this->currentUserId,
+                    'approved_at' => now(),
+                ]);
+
+            $updatedAbsences = Absence::query()
+                ->where('request_uuid', $requestUuid)
+                ->where('status', $status)
+                ->orderBy('date')
+                ->get();
+
+            $this->recordRequestLog(
+                $status === Absence::STATUS_APPROVED ? 'approved' : 'rejected',
+                $updatedAbsences,
+                $this->currentUserId,
+                [
+                    'before' => $this->snapshotRequest($pendingAbsences),
+                    'after' => $this->snapshotRequest($updatedAbsences),
+                ],
+                $status,
+            );
+        });
+    }
+
+    private function recordRequestLog(string $action, Collection $absences, ?int $actorId = null, array $metadata = [], ?string $status = null): void
+    {
+        $snapshot = $this->snapshotRequest($absences);
+
+        if ($snapshot === []) {
+            return;
+        }
+
+        AbsenceRequestLog::query()->create([
+            'request_uuid' => $snapshot['request_uuid'],
+            'user_id' => $snapshot['user_id'],
+            'actor_id' => $actorId,
+            'action' => $action,
+            'absence_type' => $snapshot['type'],
+            'status' => $status ?? $snapshot['status'],
+            'date_start' => $snapshot['date_start'],
+            'date_end' => $snapshot['date_end'],
+            'date_count' => $snapshot['date_count'],
+            'reason' => $snapshot['reason'],
+            'metadata' => array_merge([
+                'dates' => $snapshot['dates'],
+            ], $metadata),
+        ]);
+    }
+
+    private function snapshotRequest(Collection $absences): array
+    {
+        if ($absences->isEmpty()) {
+            return [];
+        }
+
+        $orderedAbsences = $absences->sortBy('date')->values();
+        /** @var Absence|null $firstAbsence */
+        $firstAbsence = $orderedAbsences->first();
+        /** @var Absence|null $lastAbsence */
+        $lastAbsence = $orderedAbsences->last();
+
+        return [
+            'request_uuid' => $firstAbsence?->request_uuid,
+            'user_id' => $firstAbsence?->user_id,
+            'type' => $firstAbsence?->type,
+            'reason' => $firstAbsence?->reason,
+            'status' => $firstAbsence?->status,
+            'date_start' => $firstAbsence?->date,
+            'date_end' => $lastAbsence?->date,
+            'date_count' => $orderedAbsences->count(),
+            'dates' => $orderedAbsences->pluck('date')->values()->all(),
+        ];
     }
 }
