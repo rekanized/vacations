@@ -9,6 +9,11 @@
   and handling manager approvals across departments and sites.
 </p>
 
+## Support
+
+If you use the app and want to support the project:
+https://buymeacoffee.com/rekanized
+
 ## What It Does
 
 LeaveBoard gives teams a shared planning surface for time off and availability.
@@ -128,11 +133,6 @@ The default seeders provide departments, users, manager relationships, absence o
 - The default product name is LeaveBoard and can be changed from the admin area.
 - The admin area is intentionally simple and currently aimed at internal validation and prototyping.
 - AI-agent-specific project context lives in `GEMINI.md`, `AGENTS.md`, and `.agent/context/`.
-
-## Support
-
-If you use the app and want to support the project:
-https://buymeacoffee.com/rekanized
 
 ## License
 
