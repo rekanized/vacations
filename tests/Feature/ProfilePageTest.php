@@ -138,7 +138,7 @@ class ProfilePageTest extends TestCase
             ->from(route('profile.show'))
             ->patch(route('profile.theme.update'), ['theme_preference' => 'dark'])
             ->assertRedirect(route('profile.show'))
-            ->assertSessionHas('status', 'Appearance updated to dark mode.');
+            ->assertSessionMissing('status');
 
         $this->assertDatabaseHas('users', [
             'id' => $user->id,

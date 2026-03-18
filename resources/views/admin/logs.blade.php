@@ -1,5 +1,5 @@
 <x-layouts.app :layout-current-user="$layoutCurrentUser ?? null">
-<div class="page-shell page-shell-wide">
+<div class="page-shell page-shell-fluid">
     <section class="admin-card admin-stack">
         <div class="admin-toolbar">
             <div>

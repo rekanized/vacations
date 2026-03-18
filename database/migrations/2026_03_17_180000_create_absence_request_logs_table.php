@@ -22,6 +22,8 @@ return new class extends Migration
             $table->text('reason')->nullable();
             $table->json('metadata')->nullable();
             $table->timestamps();
+
+            $table->index('created_at');
         });
     }
 

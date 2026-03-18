@@ -7,6 +7,7 @@ use App\Models\AbsenceOption;
 use App\Models\AbsenceRequestLog;
 use App\Models\Department;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class PageRenderingEagerLoadingTest extends TestCase
@@ -83,5 +84,35 @@ class PageRenderingEagerLoadingTest extends TestCase
             ->get(route('profile.show'))
             ->assertOk()
             ->assertSeeText('Ella Employee');
+    }
+
+    public function test_planner_render_queries_absence_options_once(): void
+    {
+        AbsenceOption::create([
+            'code' => 'S',
+            'label' => 'Vacation',
+            'color' => '#4ade80',
+            'sort_order' => 1,
+        ]);
+
+        $department = Department::create(['name' => 'Engineering']);
+        $user = $department->users()->create([
+            'name' => 'Ella Employee',
+            'location' => 'Stockholm',
+        ]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this
+            ->withSession(['current_user_id' => $user->id])
+            ->get(route('planner'))
+            ->assertOk();
+
+        $absenceOptionQueries = collect(DB::getQueryLog())
+            ->filter(fn (array $query) => preg_match('/\babsence_options\b/i', $query['query']) === 1)
+            ->count();
+
+        $this->assertSame(1, $absenceOptionQueries);
     }
 }

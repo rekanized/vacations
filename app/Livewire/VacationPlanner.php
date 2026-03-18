@@ -35,6 +35,13 @@ class VacationPlanner extends Component
     public ?string $editingRequestType = null;
     public string $editingRequestReason = '';
 
+    private ?Collection $cachedAbsenceOptions = null;
+    private ?array $cachedDepartmentNames = null;
+    private ?array $cachedSiteNames = null;
+    private ?Collection $cachedManagers = null;
+    private bool $hasResolvedCurrentUser = false;
+    private ?User $resolvedCurrentUserRecord = null;
+
     public function mount(): void
     {
         $this->syncCurrentUser();
@@ -71,7 +78,7 @@ class VacationPlanner extends Component
     {
         $this->selectedDepartments = $this->normalizeSelection(
             $value,
-            Department::query()->orderBy('name')->pluck('name')->all(),
+            $this->availableDepartmentNames(),
         );
     }
 
@@ -79,7 +86,7 @@ class VacationPlanner extends Component
     {
         $this->selectedSites = $this->normalizeSelection(
             $value,
-            User::query()->active()->whereNotNull('location')->orderBy('location')->distinct()->pluck('location')->all(),
+            $this->availableSiteNames(),
         );
     }
 
@@ -87,13 +94,7 @@ class VacationPlanner extends Component
     {
         $this->selectedManagers = $this->normalizeSelection(
             $value,
-            User::query()
-                ->active()
-                ->whereHas('reports', fn ($query) => $query->active())
-                ->orderBy('name')
-                ->pluck('id')
-                ->map(fn (int $id) => (string) $id)
-                ->all(),
+            $this->availableManagers()->pluck('id')->all(),
         );
     }
 
@@ -110,30 +111,9 @@ class VacationPlanner extends Component
 
         $period = CarbonPeriod::create($start, $end);
 
-        $sites = User::query()
-            ->active()
-            ->whereNotNull('location')
-            ->orderBy('location')
-            ->distinct()
-            ->pluck('location')
-            ->values();
-
-        $allDepartments = Department::query()
-            ->orderBy('name')
-            ->pluck('name')
-            ->values();
-
-        $managers = User::query()
-            ->active()
-            ->select(['id', 'name'])
-            ->whereHas('reports', fn ($query) => $query->active())
-            ->orderBy('name')
-            ->get()
-            ->map(fn (User $manager) => [
-                'id' => (string) $manager->id,
-                'name' => $manager->name,
-            ])
-            ->values();
+        $sites = collect($this->availableSiteNames());
+        $allDepartments = collect($this->availableDepartmentNames());
+        $managers = $this->availableManagers();
 
         $selectedSites = $this->normalizeSelection($this->selectedSites, $sites->all());
         $selectedDepartments = $this->normalizeSelection($this->selectedDepartments, $allDepartments->all());
@@ -164,10 +144,7 @@ class VacationPlanner extends Component
 
         $weeks = $dates->groupBy('week_key');
 
-        $absenceOptions = AbsenceOption::query()
-            ->orderBy('sort_order')
-            ->orderBy('label')
-            ->get();
+        $absenceOptions = $this->orderedAbsenceOptions();
 
         $absenceOptionsByCode = $absenceOptions->keyBy('code');
 
@@ -253,7 +230,7 @@ class VacationPlanner extends Component
 
     public function setAbsenceType(string $type): void
     {
-        if (! AbsenceOption::query()->where('code', $type)->exists()) {
+        if (! $this->absenceOptionExists($type)) {
             return;
         }
 
@@ -268,7 +245,7 @@ class VacationPlanner extends Component
             return;
         }
 
-        if (! AbsenceOption::query()->where('code', $type)->exists()) {
+        if (! $this->absenceOptionExists($type)) {
             return;
         }
 
@@ -448,7 +425,7 @@ class VacationPlanner extends Component
             return;
         }
 
-        if (! AbsenceOption::query()->where('code', $this->editingRequestType)->exists()) {
+        if (! $this->absenceOptionExists($this->editingRequestType)) {
             session()->flash('status', 'The selected absence type is no longer available.');
 
             return;
@@ -660,26 +637,16 @@ class VacationPlanner extends Component
 
     private function syncCurrentUser(): void
     {
-        $currentUserId = session('current_user_id');
-
-        if ($currentUserId && User::query()->active()->whereKey($currentUserId)->exists()) {
-            $this->currentUserId = (int) $currentUserId;
-
-            return;
-        }
-
-        $firstUserId = User::query()->active()->orderBy('id')->value('id');
-        $this->currentUserId = $firstUserId !== null ? (int) $firstUserId : null;
-
-        if ($this->currentUserId !== null) {
-            session(['current_user_id' => $this->currentUserId]);
-        } else {
-            session()->forget('current_user_id');
-        }
+        $this->currentUserId = $this->resolveCurrentUser()?->id;
     }
 
     private function resolveCurrentUser(): ?User
     {
+        if ($this->hasResolvedCurrentUser) {
+            return $this->resolvedCurrentUserRecord;
+        }
+
+        $this->hasResolvedCurrentUser = true;
         $currentUserId = session('current_user_id');
 
         if ($currentUserId !== null) {
@@ -687,8 +654,9 @@ class VacationPlanner extends Component
 
             if ($currentUser !== null) {
                 $this->currentUserId = $currentUser->id;
+                $this->resolvedCurrentUserRecord = $currentUser;
 
-                return $currentUser;
+                return $this->resolvedCurrentUserRecord;
             }
         }
 
@@ -697,12 +665,14 @@ class VacationPlanner extends Component
         if ($currentUser !== null) {
             $this->currentUserId = $currentUser->id;
             session(['current_user_id' => $currentUser->id]);
+            $this->resolvedCurrentUserRecord = $currentUser;
 
-            return $currentUser;
+            return $this->resolvedCurrentUserRecord;
         }
 
         $this->currentUserId = null;
         session()->forget('current_user_id');
+        $this->resolvedCurrentUserRecord = null;
 
         return null;
     }
@@ -720,11 +690,11 @@ class VacationPlanner extends Component
 
     private function syncAbsenceType(): void
     {
-        if ($this->absenceType !== null && AbsenceOption::query()->where('code', $this->absenceType)->exists()) {
+        if ($this->absenceType !== null && $this->absenceOptionExists($this->absenceType)) {
             return;
         }
 
-        $this->absenceType = AbsenceOption::query()->orderBy('sort_order')->value('code') ?? 'S';
+        $this->absenceType = $this->orderedAbsenceOptions()->first()?->code ?? 'S';
     }
 
     private function normalizeDates(array $dateRange): array
@@ -979,5 +949,80 @@ class VacationPlanner extends Component
             'date_count' => $orderedAbsences->count(),
             'dates' => $orderedAbsences->pluck('date')->values()->all(),
         ];
+    }
+
+    private function orderedAbsenceOptions(): Collection
+    {
+        if ($this->cachedAbsenceOptions !== null) {
+            return $this->cachedAbsenceOptions;
+        }
+
+        $this->cachedAbsenceOptions = AbsenceOption::query()
+            ->orderBy('sort_order')
+            ->orderBy('label')
+            ->get();
+
+        return $this->cachedAbsenceOptions;
+    }
+
+    private function absenceOptionExists(?string $type): bool
+    {
+        if ($type === null || $type === '') {
+            return false;
+        }
+
+        return $this->orderedAbsenceOptions()->contains('code', $type);
+    }
+
+    private function availableDepartmentNames(): array
+    {
+        if ($this->cachedDepartmentNames !== null) {
+            return $this->cachedDepartmentNames;
+        }
+
+        $this->cachedDepartmentNames = Department::query()
+            ->orderBy('name')
+            ->pluck('name')
+            ->all();
+
+        return $this->cachedDepartmentNames;
+    }
+
+    private function availableSiteNames(): array
+    {
+        if ($this->cachedSiteNames !== null) {
+            return $this->cachedSiteNames;
+        }
+
+        $this->cachedSiteNames = User::query()
+            ->active()
+            ->whereNotNull('location')
+            ->orderBy('location')
+            ->distinct()
+            ->pluck('location')
+            ->all();
+
+        return $this->cachedSiteNames;
+    }
+
+    private function availableManagers(): Collection
+    {
+        if ($this->cachedManagers !== null) {
+            return $this->cachedManagers;
+        }
+
+        $this->cachedManagers = User::query()
+            ->active()
+            ->select(['id', 'name'])
+            ->whereHas('reports', fn ($query) => $query->active())
+            ->orderBy('name')
+            ->get()
+            ->map(fn (User $manager) => [
+                'id' => (string) $manager->id,
+                'name' => $manager->name,
+            ])
+            ->values();
+
+        return $this->cachedManagers;
     }
 }

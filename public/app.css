@@ -363,6 +363,10 @@ body.app-body {
     max-width: 1280px;
 }
 
+.page-shell-fluid {
+    max-width: none;
+}
+
 .page-shell-admin {
     max-width: 1200px;
 }
@@ -649,6 +653,10 @@ body.app-body {
 
 .page-shell-wide {
     max-width: 1280px;
+}
+
+.page-shell-fluid {
+    max-width: none;
 }
 
 .page-shell-admin {

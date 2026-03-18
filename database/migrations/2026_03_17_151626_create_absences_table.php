@@ -25,6 +25,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['user_id', 'date']);
+            $table->index(['type', 'user_id']);
             $table->index(['user_id', 'status', 'request_uuid', 'date']);
             $table->index(['request_uuid', 'status', 'date']);
         });

@@ -77,9 +77,7 @@ class ProfileController extends Controller
             'theme_preference' => $themePreference,
         ]);
 
-        return redirect()
-            ->back()
-            ->with('status', sprintf('Appearance updated to %s mode.', $themePreference));
+        return redirect()->back();
     }
 
     private function currentUserFromSession(Request $request): ?User

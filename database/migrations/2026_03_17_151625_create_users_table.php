@@ -21,6 +21,12 @@ return new class extends Migration
             $table->string('theme_preference', 16)->default('light');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+
+            $table->index(['is_active', 'id']);
+            $table->index(['is_active', 'name']);
+            $table->index(['is_active', 'location']);
+            $table->index(['department_id', 'is_active', 'name']);
+            $table->index(['manager_id', 'is_active']);
         });
     }
 
