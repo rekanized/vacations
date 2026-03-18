@@ -8,6 +8,49 @@
         ];
     @endphp
 
+    <section class="profile-card profile-card-featured">
+        <div class="profile-card-inner">
+            <div>
+                <p class="profile-kicker">Request history</p>
+                <h2 class="profile-section-title">Latest request decisions</h2>
+            </div>
+
+            <div class="profile-requests">
+                @forelse ($requestHistory as $request)
+                    @php($colors = $statusColors[$request['status']] ?? ['bg' => 'rgba(226, 232, 240, 0.9)', 'fg' => '#334155'])
+                    <article class="profile-request">
+                        <div class="profile-request-head">
+                            <div>
+                                <h3 class="profile-request-title">{{ $request['date_label'] }}</h3>
+                                <div class="profile-request-copy">{{ $request['date_count'] }} day(s) · {{ $request['type'] ?? 'Unknown type' }}</div>
+                            </div>
+                            <span class="profile-pill" style="background: {{ $colors['bg'] }}; color: {{ $colors['fg'] }};">
+                                {{ ucfirst($request['status']) }}
+                            </span>
+                        </div>
+
+                        <div class="profile-request-meta">
+                            <span>Submitted {{ $request['submitted_at'] ?? 'Unknown time' }}</span>
+                            @if ($request['decision_at'])
+                                <span>
+                                    {{ ucfirst($request['status']) }} {{ $request['approver_name'] ? 'by ' . $request['approver_name'] . ' ' : '' }}on {{ $request['decision_at'] }}
+                                </span>
+                            @elseif ($request['status'] === 'pending')
+                                <span>Awaiting manager decision</span>
+                            @endif
+                        </div>
+
+                        @if ($request['reason'])
+                            <div class="profile-request-copy">{{ $request['reason'] }}</div>
+                        @endif
+                    </article>
+                @empty
+                    <div class="profile-empty">No request history yet. Once you submit leave, accepted and denied decisions will appear here.</div>
+                @endforelse
+            </div>
+        </div>
+    </section>
+
     <section class="profile-hero">
         <article class="profile-card">
             <div class="profile-card-inner">
@@ -102,6 +145,7 @@
                 <p class="profile-kicker">Request summary</p>
                 <h2 class="profile-section-title">Accepted, denied, and pending</h2>
             </div>
+
 
             <div class="profile-grid">
                 <div class="profile-stat">
@@ -219,47 +263,5 @@
         </aside>
     </section>
 
-    <section class="profile-card">
-        <div class="profile-card-inner">
-            <div>
-                <p class="profile-kicker">Request history</p>
-                <h2 class="profile-section-title">Latest request decisions</h2>
-            </div>
-
-            <div class="profile-requests">
-                @forelse ($requestHistory as $request)
-                    @php($colors = $statusColors[$request['status']] ?? ['bg' => 'rgba(226, 232, 240, 0.9)', 'fg' => '#334155'])
-                    <article class="profile-request">
-                        <div class="profile-request-head">
-                            <div>
-                                <h3 class="profile-request-title">{{ $request['date_label'] }}</h3>
-                                <div class="profile-request-copy">{{ $request['date_count'] }} day(s) · {{ $request['type'] ?? 'Unknown type' }}</div>
-                            </div>
-                            <span class="profile-pill" style="background: {{ $colors['bg'] }}; color: {{ $colors['fg'] }};">
-                                {{ ucfirst($request['status']) }}
-                            </span>
-                        </div>
-
-                        <div class="profile-request-meta">
-                            <span>Submitted {{ $request['submitted_at'] ?? 'Unknown time' }}</span>
-                            @if ($request['decision_at'])
-                                <span>
-                                    {{ ucfirst($request['status']) }} {{ $request['approver_name'] ? 'by ' . $request['approver_name'] . ' ' : '' }}on {{ $request['decision_at'] }}
-                                </span>
-                            @elseif ($request['status'] === 'pending')
-                                <span>Awaiting manager decision</span>
-                            @endif
-                        </div>
-
-                        @if ($request['reason'])
-                            <div class="profile-request-copy">{{ $request['reason'] }}</div>
-                        @endif
-                    </article>
-                @empty
-                    <div class="profile-empty">No request history yet. Once you submit leave, accepted and denied decisions will appear here.</div>
-                @endforelse
-            </div>
-        </div>
-    </section>
 </div>
 </x-layouts.app>

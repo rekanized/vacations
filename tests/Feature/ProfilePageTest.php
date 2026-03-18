@@ -66,6 +66,7 @@ class ProfilePageTest extends TestCase
             ->withSession(['current_user_id' => $user->id])
             ->get(route('profile.show'))
             ->assertOk()
+            ->assertSeeInOrder(['Latest request decisions', 'Personal workspace', 'Accepted, denied, and pending', 'Current planner'])
             ->assertSeeText('Ella Employee')
             ->assertSeeText('Operations')
             ->assertSeeText('Copenhagen')

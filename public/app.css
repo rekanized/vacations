@@ -538,6 +538,20 @@ body.app-body {
     border-color: rgba(252, 165, 165, 0.18);
 }
 
+[data-theme='dark'] .profile-card-featured {
+    background:
+        radial-gradient(circle at top right, rgba(56, 189, 248, 0.2), transparent 36%),
+        linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(15, 23, 42, 0) 46%),
+        var(--panel-bg-strong) !important;
+    border-color: rgba(96, 165, 250, 0.28) !important;
+    box-shadow: 0 26px 54px rgba(2, 8, 23, 0.42) !important;
+}
+
+[data-theme='dark'] .profile-card-featured .profile-request {
+    background: rgba(15, 23, 42, 0.76) !important;
+    border-color: rgba(96, 165, 250, 0.18) !important;
+}
+
 [data-theme='dark'] .admin-button.danger:hover {
     background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
 }
@@ -577,6 +591,11 @@ body.app-body {
         padding-right: 16px;
     }
 
+    .theme-toggle-form-sidebar,
+    .sidebar-footer-link {
+        display: none;
+    }
+
     .sidebar-link,
     .theme-toggle-button {
         padding: 12px;
@@ -612,6 +631,62 @@ body.app-body {
     border: 1px solid var(--border-color);
     border-radius: 24px;
     box-shadow: var(--shadow-soft);
+}
+
+.profile-card-featured {
+    position: relative;
+    overflow: hidden;
+    border-color: rgba(37, 99, 235, 0.22);
+    background:
+        radial-gradient(circle at top right, rgba(14, 165, 233, 0.16), transparent 32%),
+        linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0) 42%),
+        var(--panel-bg-strong);
+    box-shadow: 0 24px 50px rgba(15, 23, 42, 0.14);
+}
+
+.profile-card-featured::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(37, 99, 235, 0.08), transparent 22%);
+    pointer-events: none;
+}
+
+.profile-card-featured .profile-card-inner {
+    position: relative;
+}
+
+.profile-card-featured .profile-section-title {
+    font-size: 24px;
+}
+
+.profile-card-featured .profile-requests {
+    gap: 16px;
+    max-height: min(60vh, 36rem);
+    overflow-y: auto;
+    padding-right: 6px;
+    scrollbar-gutter: stable;
+}
+
+.profile-card-featured .profile-request {
+    background: rgba(255, 255, 255, 0.68);
+    border-color: rgba(148, 163, 184, 0.24);
+    backdrop-filter: blur(12px);
+}
+
+.profile-card-featured .profile-requests::-webkit-scrollbar {
+    width: 10px;
+}
+
+.profile-card-featured .profile-requests::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.6);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.profile-card-featured .profile-requests::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .profile-card-inner {
@@ -1464,6 +1539,50 @@ body.app-body {
     overflow: hidden;
 }
 
+.planner-mobile-entry {
+    display: none;
+    padding: 18px 20px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+}
+
+.planner-mobile-entry-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.planner-mobile-entry-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.planner-mobile-entry-copy {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.planner-mobile-trigger {
+    white-space: nowrap;
+}
+
+.planner-mobile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
 .planner-card {
     flex: 1;
     min-height: 0;
@@ -2266,6 +2385,7 @@ body.app-body {
 
 [data-theme='dark'] .planner-header,
 [data-theme='dark'] .planner-card,
+[data-theme='dark'] .planner-mobile-entry,
 [data-theme='dark'] .planner-panel,
 [data-theme='dark'] .planner-secondary-bar,
 [data-theme='dark'] .request-card,
@@ -2374,5 +2494,27 @@ body.app-body {
 
     .admin-inline-actions > * {
         flex-basis: 100%;
+    }
+}
+
+@media (max-width: 640px) {
+    .planner-mobile-entry {
+        display: block;
+    }
+
+    .planner-header,
+    .planner-toolbar,
+    .planner-secondary-bar,
+    .planner-card {
+        display: none;
+    }
+
+    .planner-panels {
+        grid-template-columns: 1fr;
+    }
+
+    .planner-mobile-trigger,
+    .request-actions .btn {
+        width: 100%;
     }
 }

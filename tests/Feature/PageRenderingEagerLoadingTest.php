@@ -60,7 +60,9 @@ class PageRenderingEagerLoadingTest extends TestCase
             ->withSession(['current_user_id' => $employee->id])
             ->get(route('planner'))
             ->assertOk()
-            ->assertSeeText('Ella Employee');
+            ->assertSeeText('Ella Employee')
+            ->assertSeeText('Add absence')
+            ->assertSee('Apply absence', false);
 
         $this
             ->withSession(['current_user_id' => $manager->id])

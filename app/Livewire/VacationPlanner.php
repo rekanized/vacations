@@ -328,6 +328,19 @@ class VacationPlanner extends Component
         $this->absenceType = $type;
     }
 
+    public function applyAbsenceSpan(int $userId, ?string $startDate, ?string $endDate, string $type, string $reason): void
+    {
+        $dates = $this->expandDateRange($startDate, $endDate);
+
+        if ($dates === []) {
+            session()->flash('status', 'Please choose a valid date range.');
+
+            return;
+        }
+
+        $this->applyAbsence($userId, $dates, $type, $reason);
+    }
+
     public function removeAbsence(int $userId, array $dateRange): void
     {
         $this->syncCurrentUser();

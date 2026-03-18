@@ -180,6 +180,64 @@
         </div>
 
         <div class="planner-content">
+            @if ($currentUser)
+                <section class="planner-mobile-entry" x-cloak>
+                    <div class="planner-mobile-entry-head">
+                        <div>
+                            <h2 class="planner-mobile-entry-title">Add absence</h2>
+                            <p class="planner-mobile-entry-copy">When the planner grid is hidden on narrow screens, use a date span instead.</p>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="btn btn-primary planner-mobile-trigger"
+                            @click="toggleMobileQuickAdd()"
+                            x-text="showMobileQuickAdd ? 'Close form' : 'Add absence'"
+                        ></button>
+                    </div>
+
+                    <div class="planner-mobile-form" x-show="showMobileQuickAdd" x-transition.opacity.duration.150ms>
+                        <div class="request-edit-grid">
+                            <label class="request-field">
+                                <span>Start date</span>
+                                <input type="date" class="request-input" x-model="mobileStartDate">
+                            </label>
+
+                            <label class="request-field">
+                                <span>End date</span>
+                                <input type="date" class="request-input" x-model="mobileEndDate">
+                            </label>
+
+                            <label class="request-field request-field-full">
+                                <span>Absence type</span>
+                                <select class="request-input" x-model="mobileAbsenceType">
+                                    @foreach($absenceOptions as $absenceOption)
+                                        <option value="{{ $absenceOption->code }}">{{ $absenceOption->label }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+
+                            <label class="request-field request-field-full">
+                                <span>Reason</span>
+                                <textarea class="request-textarea" x-model="mobileReason" rows="3" placeholder="Add a reason (optional)..."></textarea>
+                            </label>
+                        </div>
+
+                        <div class="selection-summary" x-show="mobileDateSpanLabel">
+                            <div class="selection-summary-header">
+                                <span class="selection-summary-title">Selected span</span>
+                                <span x-text="mobileDateSpanLabel"></span>
+                            </div>
+                        </div>
+
+                        <div class="request-actions">
+                            <button type="button" class="btn btn-secondary" @click="resetMobileQuickAdd()">Cancel</button>
+                            <button type="button" class="btn btn-primary" :disabled="!mobileQuickAddReady" @click="submitMobileQuickAdd()">Apply absence</button>
+                        </div>
+                    </div>
+                </section>
+            @endif
+
             @if($pendingRequests->isNotEmpty() || $managerApprovals->isNotEmpty())
                 <div class="planner-panels">
                     @if($pendingRequests->isNotEmpty())
@@ -493,8 +551,13 @@
                 selectionEnd: null,
                 selectedUser: null,
                 showModal: false,
+                showMobileQuickAdd: false,
                 absenceType: initialAbsenceType,
                 reason: '',
+                mobileStartDate: '',
+                mobileEndDate: '',
+                mobileAbsenceType: initialAbsenceType,
+                mobileReason: '',
                 availableDepartments,
                 availableSites,
                 availableManagers,
@@ -778,6 +841,23 @@
                     return `${totalDaysLabel} | ${weekendDaysLabel}`;
                 },
 
+                get mobileQuickAddReady() {
+                    return Boolean(this.editableUserId && this.mobileStartDate && this.mobileEndDate && this.mobileAbsenceType);
+                },
+
+                get mobileDateSpanLabel() {
+                    if (!this.mobileStartDate || !this.mobileEndDate) {
+                        return '';
+                    }
+
+                    const startLabel = this.formatSelectionDate(this.mobileStartDate);
+                    const endLabel = this.formatSelectionDate(this.mobileEndDate);
+
+                    return this.mobileStartDate === this.mobileEndDate
+                        ? startLabel
+                        : `${startLabel} to ${endLabel}`;
+                },
+
                 apply() {
                     if (this.selectedUser === null) return;
                     const dates = this.selectedDates.map((date) => date.iso);
@@ -790,6 +870,40 @@
                     const dates = this.selectedDates.map((date) => date.iso);
                     this.$wire.removeAbsence(this.selectedUser, dates);
                     this.reset();
+                },
+
+                toggleMobileQuickAdd() {
+                    if (this.showMobileQuickAdd) {
+                        this.resetMobileQuickAdd();
+
+                        return;
+                    }
+
+                    this.showMobileQuickAdd = true;
+                },
+
+                submitMobileQuickAdd() {
+                    if (!this.mobileQuickAddReady || this.editableUserId === null) {
+                        return;
+                    }
+
+                    this.$wire.applyAbsenceSpan(
+                        this.editableUserId,
+                        this.mobileStartDate,
+                        this.mobileEndDate,
+                        this.mobileAbsenceType,
+                        this.mobileReason,
+                    );
+
+                    this.resetMobileQuickAdd();
+                },
+
+                resetMobileQuickAdd() {
+                    this.showMobileQuickAdd = false;
+                    this.mobileStartDate = '';
+                    this.mobileEndDate = '';
+                    this.mobileReason = '';
+                    this.mobileAbsenceType = this.absenceType ?? this.mobileAbsenceType;
                 },
 
                 reset() {
