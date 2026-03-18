@@ -352,7 +352,7 @@
     </section>
 
     <div class="modal-overlay" x-show="showAddOptionModal" x-cloak x-transition>
-        <div class="modal-content" @click.away="showAddOptionModal = false">
+        <div class="modal-content" @click.away="showAddOptionModal = false" @click.stop>
             <div>
                 <h2 class="modal-title">Add absence option</h2>
                 <p style="color: var(--text-soft); margin: 8px 0 0;">New options become available in the planner modal immediately.</p>

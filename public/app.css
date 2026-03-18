@@ -1305,6 +1305,13 @@ body.app-body {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    position: relative;
+}
+
+.modal-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
 }
 
 .modal-title {

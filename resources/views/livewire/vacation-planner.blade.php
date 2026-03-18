@@ -482,9 +482,9 @@
 
     <!-- Selection Modal -->
     <div class="modal-overlay" x-show="isModalOpen" x-cloak x-transition x-on:keydown.escape.window="closeModal()">
-        <div class="modal-content" :class="{ 'request-edit-modal': isEditModalOpen }" @click.away="closeModal()">
+        <div class="modal-content" :class="{ 'request-edit-modal': isEditModalOpen }" @click.away="closeModal()" @click.stop>
             <template x-if="isEditModalOpen">
-                <div>
+                <div class="modal-stack">
                     <div class="request-edit-modal-head">
                         <div>
                             <h2 class="modal-title">Edit pending request</h2>
@@ -546,7 +546,7 @@
             </template>
 
             <template x-if="!isEditModalOpen">
-                <div>
+                <div class="modal-stack">
                     <h2 class="modal-title">Define Absence</h2>
 
                     <div class="selection-summary" x-show="selectedDates.length > 0">
@@ -578,7 +578,7 @@
 
                     <div class="type-selector">
                         @foreach($absenceOptions as $option)
-                            <button class="type-btn" :class="{ 'active': absenceType === '{{ $option->code }}' }" @click="absenceType = '{{ $option->code }}'">
+                            <button type="button" class="type-btn" :class="{ 'active': absenceType === '{{ $option->code }}' }" @click.prevent.stop="absenceType = '{{ $option->code }}'">
                                 <span class="chip-dot" style="background: {{ $option->color }};"></span> {{ $option->label }}
                             </button>
                         @endforeach
@@ -587,9 +587,9 @@
                     <textarea class="reason-input" x-model="reason" placeholder="Add a reason (optional)..." rows="3"></textarea>
 
                     <div class="modal-actions">
-                        <button class="btn btn-secondary" @click="closeModal()">Cancel</button>
-                        <x-loading-button type="button" loading-target="removeAbsence" class="btn btn-danger" @click="remove()">Clear Selection</x-loading-button>
-                        <x-loading-button type="button" loading-target="applyAbsence" class="btn btn-primary" @click="apply()">Apply Absence</x-loading-button>
+                        <button type="button" class="btn btn-secondary" @click.prevent.stop="closeModal()">Cancel</button>
+                        <x-loading-button type="button" loading-target="removeAbsence" class="btn btn-danger" @click.prevent.stop="remove()">Clear Selection</x-loading-button>
+                        <x-loading-button type="button" loading-target="applyAbsence" class="btn btn-primary" @click.prevent.stop="apply()">Apply Absence</x-loading-button>
                     </div>
                 </div>
             </template>
@@ -943,12 +943,12 @@
                     }
 
                     this.showModal = false;
-                    await this.$wire.startEditingRequest(requestUuid);
+                    await this.$wire.$call('startEditingRequest', requestUuid);
                 },
 
                 closeModal() {
                     if (this.isEditModalOpen) {
-                        this.$wire.cancelEditingRequest();
+                        this.$wire.$call('cancelEditingRequest');
 
                         return;
                     }
@@ -959,14 +959,14 @@
                 async apply() {
                     if (this.selectedUser === null) return;
                     const dates = this.selectedDates.map((date) => date.iso);
-                    await this.$wire.applyAbsence(this.selectedUser, dates, this.absenceType, this.reason);
+                    await this.$wire.$call('applyAbsence', this.selectedUser, dates, this.absenceType, this.reason);
                     this.reset();
                 },
 
                 async remove() {
                     if (this.selectedUser === null) return;
                     const dates = this.selectedDates.map((date) => date.iso);
-                    await this.$wire.removeAbsence(this.selectedUser, dates);
+                    await this.$wire.$call('removeAbsence', this.selectedUser, dates);
                     this.reset();
                 },
 
@@ -985,7 +985,8 @@
                         return;
                     }
 
-                    await this.$wire.applyAbsenceSpan(
+                    await this.$wire.$call(
+                        'applyAbsenceSpan',
                         this.editableUserId,
                         this.mobileStartDate,
                         this.mobileEndDate,

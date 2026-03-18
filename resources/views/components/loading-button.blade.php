@@ -16,36 +16,34 @@
 
 <button
     type="{{ $type }}"
-    x-data="{
-        isSubmitting: false,
-        init() {
-            if (! {{ $submitTracking }}) {
-                return;
-            }
+    @if ($tracksSubmit)
+        x-data="{
+            isSubmitting: false,
+            init() {
+                const formId = this.$el.getAttribute('form');
+                const form = formId ? document.getElementById(formId) : this.$el.form;
 
-            const formId = this.$el.getAttribute('form');
-            const form = formId ? document.getElementById(formId) : this.$el.form;
-
-            if (!form) {
-                return;
-            }
-
-            form.addEventListener('submit', (event) => {
-                if (event.submitter !== this.$el) {
+                if (!form) {
                     return;
                 }
 
-                requestAnimationFrame(() => {
-                    if (event.defaultPrevented || this.$el.disabled) {
+                form.addEventListener('submit', (event) => {
+                    if (event.submitter !== this.$el) {
                         return;
                     }
 
-                    this.isSubmitting = true;
-                    this.$el.disabled = true;
+                    requestAnimationFrame(() => {
+                        if (event.defaultPrevented || this.$el.disabled) {
+                            return;
+                        }
+
+                        this.isSubmitting = true;
+                        this.$el.disabled = true;
+                    });
                 });
-            });
-        }
-    }"
+            }
+        }"
+    @endif
     @if ($tracksLivewire)
         wire:loading.attr="disabled"
         wire:target="{{ $resolvedLoadingTarget }}"
@@ -54,7 +52,9 @@
 >
     <span
         class="loading-button__label"
-        :class="{ 'loading-button__label--hidden': isSubmitting }"
+        @if ($tracksSubmit)
+            :class="{ 'loading-button__label--hidden': isSubmitting }"
+        @endif
         @if ($tracksLivewire)
             wire:loading.class="loading-button__label--hidden"
             wire:target="{{ $resolvedLoadingTarget }}"
@@ -63,7 +63,9 @@
 
     <span
         class="loading-button__spinner"
-        :class="{ 'loading-button__spinner--visible': isSubmitting }"
+        @if ($tracksSubmit)
+            :class="{ 'loading-button__spinner--visible': isSubmitting }"
+        @endif
         @if ($tracksLivewire)
             wire:loading.class="loading-button__spinner--visible"
             wire:target="{{ $resolvedLoadingTarget }}"
