@@ -103,26 +103,22 @@ php artisan optimize:clear
 
 ## Docker
 
-This repository includes a Dockerfile for a simple local container run without any Node tooling.
+For Docker, the app now runs behind Nginx with PHP-FPM instead of `php artisan serve`.
 
-Build the image:
-
-```bash
-docker build -t leaveboard .
-```
-
-Run the container:
+Start the stack:
 
 ```bash
-docker run --rm -p 8000:8000 leaveboard
+docker compose up --build
 ```
 
 Then open `http://127.0.0.1:8000`.
 
 Notes:
 
-- The container seeds a SQLite database during image build.
-- Rebuild the image after code or database-seed changes.
+- `app` runs PHP-FPM and initializes the SQLite database on container startup.
+- `nginx` serves the public app and forwards PHP requests to the `app` service.
+- Docker uses `docker/nginx.conf`; the root `nginx.conf` remains reserved for Azure Web Apps.
+- The default compose file is intended for local use and keeps the setup free of Node tooling.
 
 ## Seeded Demo Setup
 

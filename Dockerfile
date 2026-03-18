@@ -1,4 +1,4 @@
-FROM php:8.3-cli-bookworm
+FROM php:8.3-fpm-bookworm
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git unzip libsqlite3-dev libonig-dev libxml2-dev \
@@ -14,13 +14,12 @@ RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
 COPY . .
 
-RUN cp .env.example .env \
-    && touch database/database.sqlite \
-    && php artisan key:generate --no-interaction \
-    && php artisan migrate:fresh --seed --force --no-interaction \
-    && php artisan storage:link \
-    && php artisan optimize:clear
+RUN chmod +x docker/entrypoint.sh \
+    && mkdir -p storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache database \
+    && chown -R www-data:www-data storage bootstrap/cache database
 
-EXPOSE 8000
+EXPOSE 9000
 
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+ENTRYPOINT ["/app/docker/entrypoint.sh"]
+
+CMD ["php-fpm"]
