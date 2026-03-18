@@ -2,6 +2,11 @@
   <img src="public/brand/leaveboard-mark.svg" alt="LeaveBoard logo" width="88" height="88">
 </p>
 
+<p align="center">
+  If you use the app and want to support the project, I'd appreciate a coffee:
+  <a href="https://buymeacoffee.com/rekanized">buymeacoffee.com/rekanized</a>
+</p>
+
 <h1 align="center">LeaveBoard</h1>
 
 <p align="center">
