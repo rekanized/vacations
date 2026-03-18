@@ -7,6 +7,8 @@
             'deleted' => ['bg' => '#fee2e2', 'fg' => '#b91c1c'],
             'approved' => ['bg' => '#dcfce7', 'fg' => '#166534'],
             'rejected' => ['bg' => '#fef3c7', 'fg' => '#92400e'],
+            'user_inactivated' => ['bg' => '#fee2e2', 'fg' => '#991b1b'],
+            'user_reactivated' => ['bg' => '#dcfce7', 'fg' => '#166534'],
         ];
     @endphp
 
@@ -183,7 +185,7 @@
             <div>
                 <h1 style="font-size: 28px;">Request log</h1>
                 <p style="color: #475569; max-width: 760px; margin-bottom: 0;">
-                    Audit trail for absence submissions, edits, approvals, rejections, and deletions.
+                    Audit trail for absence activity and admin user-status changes.
                 </p>
             </div>
 
@@ -294,6 +296,9 @@
                                             @endif
                                             @if (($metadata['source'] ?? null) === 'planner_grid')
                                                 <span class="log-meta-pill">Removed from planner</span>
+                                            @endif
+                                            @if (($metadata['source'] ?? null) === 'admin_user_management')
+                                                <span class="log-meta-pill">Admin user management</span>
                                             @endif
                                         </div>
 

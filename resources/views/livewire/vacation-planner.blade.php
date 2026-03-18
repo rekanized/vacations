@@ -1,14 +1,16 @@
 <div
-    wire:key="planner-{{ md5($viewDate . '|' . json_encode($selectedDepartments) . '|' . json_encode($selectedSites) . '|' . $search . '|' . ($currentUser?->id ?? 'guest')) }}"
+    wire:key="planner-{{ md5($viewDate . '|' . json_encode($selectedDepartments) . '|' . json_encode($selectedSites) . '|' . json_encode($selectedManagers) . '|' . $search . '|' . ($currentUser?->id ?? 'guest')) }}"
     x-data="planner({
         initialViewDate: @js($viewDate),
         initialDepartments: @js($departments->pluck('name')->values()),
         availableDepartments: @js($allDepartments->values()),
         availableSites: @js($sites->values()),
+        availableManagers: @js($managers->values()),
         editableUserId: @js($currentUser?->id),
         initialAbsenceType: @js($absenceType),
         selectedDepartments: @entangle('selectedDepartments').live,
-        selectedSites: @entangle('selectedSites').live
+        selectedSites: @entangle('selectedSites').live,
+        selectedManagers: @entangle('selectedManagers').live
     })"
     @mouseup.window="stopDragging()"
 >
@@ -728,6 +730,55 @@
             font-weight: 600;
         }
 
+        .selection-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            background: #f8fafc;
+        }
+
+        .selection-summary-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .selection-summary-title {
+            color: var(--text-main);
+            font-weight: 700;
+        }
+
+        .selection-summary-range {
+            margin: 0;
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .selection-chip-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .selection-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: white;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            font-size: 12px;
+            font-weight: 600;
+        }
+
         .type-selector {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -996,13 +1047,13 @@
                         type="search"
                         class="filter-search-input"
                         wire:model.live.debounce.300ms="search"
-                        x-on:input="departmentFilterOpen = false; siteFilterOpen = false"
+                        x-on:input="departmentFilterOpen = false; siteFilterOpen = false; managerFilterOpen = false"
                         placeholder="Search personnel"
                     >
                 </label>
 
                 <div class="filter-dropdown" @click.outside="departmentFilterOpen = false">
-                    <button type="button" class="filter-trigger" @click="departmentFilterOpen = !departmentFilterOpen; siteFilterOpen = false">
+                    <button type="button" class="filter-trigger" @click="departmentFilterOpen = !departmentFilterOpen; siteFilterOpen = false; managerFilterOpen = false">
                         <span class="filter-trigger-copy">
                             <span class="filter-label">Departments</span>
                             <span class="filter-value" x-text="filterLabel(selectedDepartments, 'All Departments')"></span>
@@ -1030,8 +1081,37 @@
                     </div>
                 </div>
 
+                <div class="filter-dropdown" @click.outside="managerFilterOpen = false">
+                    <button type="button" class="filter-trigger" @click="managerFilterOpen = !managerFilterOpen; departmentFilterOpen = false; siteFilterOpen = false">
+                        <span class="filter-trigger-copy">
+                            <span class="filter-label">Managers</span>
+                            <span class="filter-value" x-text="managerFilterLabel()"></span>
+                        </span>
+                        <span class="icon">expand_more</span>
+                    </button>
+
+                    <div class="filter-panel" x-show="managerFilterOpen" x-cloak x-transition.origin.top.right>
+                        <div class="filter-panel-actions">
+                            <strong style="font-size: 12px; color: var(--text-main);">Choose managers</strong>
+                            <div style="display: inline-flex; gap: 12px;">
+                                <button type="button" class="filter-link" @click="selectedManagers = []">Clear</button>
+                                <button type="button" class="filter-link" @click="selectedManagers = availableManagers.map((manager) => manager.id)">All</button>
+                            </div>
+                        </div>
+
+                        <div class="filter-options">
+                            <template x-for="manager in availableManagers" :key="manager.id">
+                                <label class="filter-option">
+                                    <input type="checkbox" x-model="selectedManagers" :value="manager.id">
+                                    <span x-text="manager.name"></span>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="filter-dropdown" @click.outside="siteFilterOpen = false">
-                    <button type="button" class="filter-trigger" @click="siteFilterOpen = !siteFilterOpen; departmentFilterOpen = false">
+                    <button type="button" class="filter-trigger" @click="siteFilterOpen = !siteFilterOpen; departmentFilterOpen = false; managerFilterOpen = false">
                         <span class="filter-trigger-copy">
                             <span class="filter-label">Sites</span>
                             <span class="filter-value" x-text="filterLabel(selectedSites, 'All Sites')"></span>
@@ -1365,6 +1445,19 @@
     <div class="modal-overlay" x-show="showModal" x-cloak x-transition>
         <div class="modal-content" @click.away="reset()">
             <h2 class="modal-title">Define Absence</h2>
+
+            <div class="selection-summary" x-show="selectedDates.length > 0">
+                <div class="selection-summary-header">
+                    <span class="selection-summary-title">Selected days</span>
+                    <span x-text="selectionStatsLabel"></span>
+                </div>
+
+                <div class="selection-chip-list">
+                    <template x-for="span in selectedDateSpans" :key="span.key">
+                        <span class="selection-chip" x-text="span.label"></span>
+                    </template>
+                </div>
+            </div>
             
             <div class="type-selector">
                 @foreach($absenceOptions as $option)
@@ -1391,10 +1484,12 @@
                 initialDepartments = [],
                 availableDepartments = [],
                 availableSites = [],
+                availableManagers = [],
                 editableUserId = null,
                 initialAbsenceType = null,
                 selectedDepartments,
                 selectedSites,
+                selectedManagers,
             }) => ({
                 initialViewDate,
                 editableUserId,
@@ -1409,10 +1504,13 @@
                 reason: '',
                 availableDepartments,
                 availableSites,
+                availableManagers,
                 selectedDepartments,
                 selectedSites,
+                selectedManagers,
                 departmentFilterOpen: false,
                 siteFilterOpen: false,
+                managerFilterOpen: false,
                 expandedDepartments: new Set(initialDepartments),
 
                 init() {
@@ -1438,6 +1536,20 @@
                     }
 
                     return `${values.length} selected`;
+                },
+
+                managerFilterLabel() {
+                    if (!Array.isArray(this.selectedManagers) || this.selectedManagers.length === 0) {
+                        return 'All Managers';
+                    }
+
+                    if (this.selectedManagers.length === 1) {
+                        const selectedManager = this.availableManagers.find((manager) => manager.id === this.selectedManagers[0]);
+
+                        return selectedManager?.name ?? '1 selected';
+                    }
+
+                    return `${this.selectedManagers.length} selected`;
                 },
 
                 scrollToDate(date, smooth = false) {
@@ -1584,16 +1696,105 @@
                     return this.selectedUser === userId && this.selectedRange.includes(dateIndex);
                 },
 
+                dateHeaders() {
+                    return Array.from(this.$root.querySelectorAll('.date-header-data'));
+                },
+
+                formatSelectionDate(isoDate) {
+                    const [year, month, day] = isoDate.split('-').map(Number);
+                    const date = new Date(Date.UTC(year, month - 1, day));
+
+                    return new Intl.DateTimeFormat('en-GB', {
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        timeZone: 'UTC',
+                    }).format(date);
+                },
+
+                get selectedDates() {
+                    return this.selectedRange
+                        .map((idx) => this.dateHeaders()[idx]?.dataset.date ?? null)
+                        .filter((date) => Boolean(date))
+                        .map((iso) => ({
+                            iso,
+                            isWeekend: [0, 6].includes(new Date(`${iso}T00:00:00Z`).getUTCDay()),
+                            label: this.formatSelectionDate(iso),
+                        }));
+                },
+
+                get selectedWeekendDays() {
+                    return this.selectedDates.filter((date) => date.isWeekend).length;
+                },
+
+                get selectedDateSpans() {
+                    if (this.selectedDates.length === 0) {
+                        return [];
+                    }
+
+                    const spans = [];
+
+                    this.selectedDates.forEach((date) => {
+                        const currentDate = new Date(`${date.iso}T00:00:00Z`);
+                        const previousSpan = spans[spans.length - 1];
+
+                        if (!previousSpan) {
+                            spans.push({
+                                key: date.iso,
+                                startIso: date.iso,
+                                endIso: date.iso,
+                                startLabel: date.label,
+                                endLabel: date.label,
+                            });
+
+                            return;
+                        }
+
+                        const previousEndDate = new Date(`${previousSpan.endIso}T00:00:00Z`);
+                        const dayDiff = (currentDate.getTime() - previousEndDate.getTime()) / 86400000;
+
+                        if (dayDiff === 1) {
+                            previousSpan.endIso = date.iso;
+                            previousSpan.endLabel = date.label;
+
+                            return;
+                        }
+
+                        spans.push({
+                            key: date.iso,
+                            startIso: date.iso,
+                            endIso: date.iso,
+                            startLabel: date.label,
+                            endLabel: date.label,
+                        });
+                    });
+
+                    return spans.map((span) => ({
+                        key: span.key,
+                        label: span.startIso === span.endIso
+                            ? span.startLabel
+                            : `${span.startLabel} to ${span.endLabel}`,
+                    }));
+                },
+
+                get selectionStatsLabel() {
+                    const totalDaysLabel = this.selectedDates.length === 1 ? '1 day' : `${this.selectedDates.length} days`;
+                    const weekendDaysLabel = this.selectedWeekendDays === 1 ? '1 weekend day' : `${this.selectedWeekendDays} weekend days`;
+
+                    return `${totalDaysLabel} | ${weekendDaysLabel}`;
+                },
+
                 apply() {
                     if (this.selectedUser === null) return;
-                    const dates = this.selectedRange.map(idx => this.$root.querySelectorAll('.date-header-data')[idx].dataset.date);
+                    const dates = this.selectedDates.map((date) => date.iso);
                     this.$wire.applyAbsence(this.selectedUser, dates, this.absenceType, this.reason);
                     this.reset();
                 },
 
                 remove() {
                     if (this.selectedUser === null) return;
-                    const dates = this.selectedRange.map(idx => this.$root.querySelectorAll('.date-header-data')[idx].dataset.date);
+                    const dates = this.selectedDates.map((date) => date.iso);
                     this.$wire.removeAbsence(this.selectedUser, dates);
                     this.reset();
                 },

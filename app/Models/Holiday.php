@@ -6,5 +6,5 @@ use Illuminate\Database\Eloquent\Model;
 
 class Holiday extends Model
 {
-    protected $fillable = ['date', 'name'];
+    protected $fillable = ['country_code', 'date', 'name'];
 }

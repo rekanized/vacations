@@ -22,6 +22,7 @@ class WebRoutesTest extends TestCase
             'admin logs' => ['admin.logs', ['GET', 'HEAD'], 'admin/logs', AdminController::class.'@logs'],
             'update application name' => ['admin.application-name.update', ['POST'], 'admin/application-name', AdminController::class.'@updateApplicationName'],
             'impersonate user' => ['admin.impersonate', ['POST'], 'admin/impersonate', AdminController::class.'@impersonate'],
+            'update user activity' => ['admin.users.activity', ['PATCH'], 'admin/users/{user}/activity', AdminController::class.'@updateUserActivity'],
             'store absence option' => ['admin.absence-options.store', ['POST'], 'admin/absence-options', AdminController::class.'@storeAbsenceOption'],
             'update absence option' => ['admin.absence-options.update', ['PATCH'], 'admin/absence-options/{absenceOption}', AdminController::class.'@updateAbsenceOption'],
             'delete absence option' => ['admin.absence-options.destroy', ['DELETE'], 'admin/absence-options/{absenceOption}', AdminController::class.'@destroyAbsenceOption'],

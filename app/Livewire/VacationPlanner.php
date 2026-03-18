@@ -9,7 +9,7 @@ use App\Models\Department;
 use App\Models\User;
 use App\Models\Absence;
 use App\Models\Holiday;
-use App\Support\SwedishHolidayCalendar;
+use App\Support\HolidayCalendar;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Collection;
@@ -23,6 +23,7 @@ class VacationPlanner extends Component
 
     public array $selectedSites = [];
     public array $selectedDepartments = [];
+    public array $selectedManagers = [];
     public string $search = '';
     public ?string $absenceType = null;
 
@@ -77,7 +78,21 @@ class VacationPlanner extends Component
     {
         $this->selectedSites = $this->normalizeSelection(
             $value,
-            User::query()->whereNotNull('location')->orderBy('location')->distinct()->pluck('location')->all(),
+            User::query()->active()->whereNotNull('location')->orderBy('location')->distinct()->pluck('location')->all(),
+        );
+    }
+
+    public function updatedSelectedManagers(array $value): void
+    {
+        $this->selectedManagers = $this->normalizeSelection(
+            $value,
+            User::query()
+                ->active()
+                ->whereHas('reports', fn ($query) => $query->active())
+                ->orderBy('name')
+                ->pluck('id')
+                ->map(fn (int $id) => (string) $id)
+                ->all(),
         );
     }
 
@@ -85,7 +100,7 @@ class VacationPlanner extends Component
 
     public function render()
     {
-        $this->syncCurrentUser();
+        $currentUser = $this->resolveCurrentUser();
         $this->syncAbsenceType();
         $searchTerm = trim($this->search);
 
@@ -94,7 +109,40 @@ class VacationPlanner extends Component
 
         $period = CarbonPeriod::create($start, $end);
 
-        $holidays = $this->holidaysForRange($start, $end);
+        $sites = User::query()
+            ->active()
+            ->whereNotNull('location')
+            ->orderBy('location')
+            ->distinct()
+            ->pluck('location')
+            ->values();
+
+        $allDepartments = Department::query()
+            ->orderBy('name')
+            ->pluck('name')
+            ->values();
+
+        $managers = User::query()
+            ->active()
+            ->select(['id', 'name'])
+            ->whereHas('reports', fn ($query) => $query->active())
+            ->orderBy('name')
+            ->get()
+            ->map(fn (User $manager) => [
+                'id' => (string) $manager->id,
+                'name' => $manager->name,
+            ])
+            ->values();
+
+        $selectedSites = $this->normalizeSelection($this->selectedSites, $sites->all());
+        $selectedDepartments = $this->normalizeSelection($this->selectedDepartments, $allDepartments->all());
+        $selectedManagers = $this->normalizeSelection($this->selectedManagers, $managers->pluck('id')->all());
+
+        $this->selectedSites = $selectedSites;
+        $this->selectedDepartments = $selectedDepartments;
+        $this->selectedManagers = $selectedManagers;
+
+        $holidays = $this->holidaysForRange($start, $end, $currentUser?->holiday_country);
 
         $dates = collect($period)->map(function ($date) use ($holidays) {
             $dateStr = $date->format('Y-m-d');
@@ -115,32 +163,6 @@ class VacationPlanner extends Component
 
         $weeks = $dates->groupBy('week_key');
 
-        $sites = User::query()
-            ->whereNotNull('location')
-            ->orderBy('location')
-            ->distinct()
-            ->pluck('location')
-            ->values();
-
-        $allDepartments = Department::query()
-            ->orderBy('name')
-            ->pluck('name')
-            ->values();
-
-        $selectedSites = $this->normalizeSelection($this->selectedSites, $sites->all());
-        $selectedDepartments = $this->normalizeSelection($this->selectedDepartments, $allDepartments->all());
-
-        $this->selectedSites = $selectedSites;
-        $this->selectedDepartments = $selectedDepartments;
-
-        $currentUser = User::query()
-            ->select(['id', 'department_id', 'manager_id', 'name', 'location'])
-            ->with([
-                'manager:id,name',
-                'department:id,name',
-            ])
-            ->find($this->currentUserId);
-
         $absenceOptions = AbsenceOption::query()
             ->orderBy('sort_order')
             ->orderBy('label')
@@ -150,9 +172,15 @@ class VacationPlanner extends Component
 
         $departments = Department::query()
         ->select(['id', 'name'])
-        ->with(['users' => function ($query) use ($start, $end, $searchTerm) {
+        ->with(['users' => function ($query) use ($start, $end, $searchTerm, $selectedManagers) {
+            $query->active();
+
             if ($this->selectedSites !== []) {
                 $query->whereIn('location', $this->selectedSites);
+            }
+
+            if ($selectedManagers !== []) {
+                $query->whereIn('manager_id', $selectedManagers);
             }
 
             if ($searchTerm !== '') {
@@ -160,7 +188,7 @@ class VacationPlanner extends Component
             }
 
             $query
-                ->select(['id', 'department_id', 'name', 'location'])
+                ->select(['id', 'department_id', 'manager_id', 'name', 'location'])
                 ->orderBy('name');
 
             $query->with(['absences' => function ($q) use ($start, $end) {
@@ -174,12 +202,17 @@ class VacationPlanner extends Component
         })
         ->when($selectedSites !== [], function ($query) use ($selectedSites) {
             $query->whereHas('users', function ($userQuery) use ($selectedSites) {
-                $userQuery->whereIn('location', $selectedSites);
+                $userQuery->active()->whereIn('location', $selectedSites);
+            });
+        })
+        ->when($selectedManagers !== [], function ($query) use ($selectedManagers) {
+            $query->whereHas('users', function ($userQuery) use ($selectedManagers) {
+                $userQuery->active()->whereIn('manager_id', $selectedManagers);
             });
         })
         ->when($searchTerm !== '', function ($query) use ($searchTerm) {
             $query->whereHas('users', function ($userQuery) use ($searchTerm) {
-                $userQuery->where('name', 'like', "%{$searchTerm}%");
+                $userQuery->active()->where('name', 'like', "%{$searchTerm}%");
             });
         })
         ->orderBy('name')
@@ -205,6 +238,7 @@ class VacationPlanner extends Component
             'departments' => $departments,
             'sites' => $sites,
             'allDepartments' => $allDepartments,
+            'managers' => $managers,
             'periodLabel' => $this->formatPeriodLabel($start, $end),
             'currentUser' => $currentUser,
             'absenceOptions' => $absenceOptions,
@@ -237,7 +271,10 @@ class VacationPlanner extends Component
             return;
         }
 
-        $currentUser = User::query()->find($this->currentUserId);
+        $currentUser = User::query()
+            ->active()
+            ->select(['id', 'manager_id'])
+            ->find($this->currentUserId);
 
         if (! $currentUser) {
             return;
@@ -544,19 +581,23 @@ class VacationPlanner extends Component
         $allowedLookup = array_fill_keys($allowedValues, true);
 
         return collect($values)
-            ->filter(fn (mixed $value) => is_string($value) && $value !== '' && isset($allowedLookup[$value]))
+            ->map(fn (mixed $value) => is_scalar($value) ? (string) $value : null)
+            ->filter(fn (?string $value) => $value !== null && $value !== '' && isset($allowedLookup[$value]))
             ->unique()
             ->values()
             ->all();
     }
 
-    private function holidaysForRange(Carbon $start, Carbon $end): Collection
+    private function holidaysForRange(Carbon $start, Carbon $end, ?string $countryCode = null): Collection
     {
+        $resolvedCountry = HolidayCalendar::normalizeCountry($countryCode);
+
         $generatedHolidays = collect(range($start->year, $end->year))
-            ->flatMap(fn (int $year) => SwedishHolidayCalendar::forYear($year))
+            ->flatMap(fn (int $year) => HolidayCalendar::forYear($resolvedCountry, $year))
             ->keyBy('date');
 
         $storedHolidays = Holiday::query()
+            ->where('country_code', $resolvedCountry)
             ->whereBetween('date', [$start->format('Y-m-d'), $end->format('Y-m-d')])
             ->get()
             ->map(fn (Holiday $holiday) => [
@@ -595,18 +636,60 @@ class VacationPlanner extends Component
     {
         $currentUserId = session('current_user_id');
 
-        if ($currentUserId && User::query()->whereKey($currentUserId)->exists()) {
+        if ($currentUserId && User::query()->active()->whereKey($currentUserId)->exists()) {
             $this->currentUserId = (int) $currentUserId;
 
             return;
         }
 
-        $firstUserId = User::query()->orderBy('id')->value('id');
+        $firstUserId = User::query()->active()->orderBy('id')->value('id');
         $this->currentUserId = $firstUserId !== null ? (int) $firstUserId : null;
 
         if ($this->currentUserId !== null) {
             session(['current_user_id' => $this->currentUserId]);
+        } else {
+            session()->forget('current_user_id');
         }
+    }
+
+    private function resolveCurrentUser(): ?User
+    {
+        $currentUserId = session('current_user_id');
+
+        if ($currentUserId !== null) {
+            $currentUser = $this->currentUserQuery()->find($currentUserId);
+
+            if ($currentUser !== null) {
+                $this->currentUserId = $currentUser->id;
+
+                return $currentUser;
+            }
+        }
+
+        $currentUser = $this->currentUserQuery()->first();
+
+        if ($currentUser !== null) {
+            $this->currentUserId = $currentUser->id;
+            session(['current_user_id' => $currentUser->id]);
+
+            return $currentUser;
+        }
+
+        $this->currentUserId = null;
+        session()->forget('current_user_id');
+
+        return null;
+    }
+
+    private function currentUserQuery()
+    {
+        return User::query()
+            ->active()
+            ->select(['id', 'department_id', 'manager_id', 'name', 'location', 'holiday_country'])
+            ->with([
+                'manager:id,name',
+                'department:id,name',
+            ]);
     }
 
     private function syncAbsenceType(): void
@@ -664,7 +747,6 @@ class VacationPlanner extends Component
         }
 
         return Absence::query()
-            ->with('user:id,name')
             ->where('user_id', $this->currentUserId)
             ->where('status', Absence::STATUS_PENDING)
             ->whereNotNull('request_uuid')
@@ -696,10 +778,10 @@ class VacationPlanner extends Component
         }
 
         return Absence::query()
-            ->with('user:id,name,manager_id')
+            ->with('user:id,name')
             ->where('status', Absence::STATUS_PENDING)
             ->whereNotNull('request_uuid')
-            ->whereHas('user', fn ($query) => $query->where('manager_id', $this->currentUserId))
+            ->whereHas('user', fn ($query) => $query->active()->where('manager_id', $this->currentUserId))
             ->orderBy('date')
             ->get()
             ->groupBy('request_uuid')
@@ -718,7 +800,7 @@ class VacationPlanner extends Component
         return [
             'request_uuid' => $firstAbsence?->request_uuid,
             'user_id' => $firstAbsence?->user_id,
-            'user_name' => $firstAbsence?->user?->name,
+            'user_name' => $firstAbsence && $firstAbsence->relationLoaded('user') ? $firstAbsence->user?->name : null,
             'type' => $firstAbsence?->type,
             'reason' => $firstAbsence?->reason,
             'date_start' => $firstAbsence?->date,
@@ -756,7 +838,7 @@ class VacationPlanner extends Component
         $pendingAbsences = Absence::query()
             ->where('request_uuid', $requestUuid)
             ->where('status', Absence::STATUS_PENDING)
-            ->whereHas('user', fn ($query) => $query->where('manager_id', $this->currentUserId))
+            ->whereHas('user', fn ($query) => $query->active()->where('manager_id', $this->currentUserId))
             ->orderBy('date')
             ->get();
 
@@ -768,7 +850,7 @@ class VacationPlanner extends Component
             Absence::query()
                 ->where('request_uuid', $requestUuid)
                 ->where('status', Absence::STATUS_PENDING)
-                ->whereHas('user', fn ($query) => $query->where('manager_id', $this->currentUserId))
+                ->whereHas('user', fn ($query) => $query->active()->where('manager_id', $this->currentUserId))
                 ->update([
                     'status' => $status,
                     'approved_by' => $this->currentUserId,

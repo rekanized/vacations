@@ -6,7 +6,8 @@
 
 <p align="center">
   A polished Laravel-based leave planning workspace for visualising team availability,
-  submitting absence requests, and managing approvals across departments and sites.
+  submitting absence requests, managing approvals across departments and sites,
+  and personalising public-holiday calendars per user.
 </p>
 
 ## Overview
@@ -18,7 +19,8 @@ The application combines a timeline-style planner with a small admin workspace f
 - choosing the active user via impersonation,
 - maintaining absence types,
 - updating the application name,
-- supporting manager-based approval workflows.
+- supporting manager-based approval workflows,
+- letting each user manage their own holiday-country profile.
 
 ## Core functionality
 
@@ -31,6 +33,7 @@ The application combines a timeline-style planner with a small admin workspace f
 - Department sections with expandable user rows.
 - Department-level day counts to quickly see staffing impact.
 - Current-user spotlight and quick jump back to your own row.
+- Holiday markers that follow the current user's selected holiday country.
 
 ### Filtering and visibility
 
@@ -63,6 +66,18 @@ The application combines a timeline-style planner with a small admin workspace f
 - Managers can review requests submitted by their direct reports and approve or reject them.
 - Approval metadata is tracked with status, approver, and approval timestamp.
 
+### User profile
+
+- Each active session user has a dedicated `/profile` page.
+- Users can configure which country's public holidays should be used in the planner.
+- The profile page shows:
+  - the user's department,
+  - the user's site,
+  - the user's manager,
+  - request totals for approved, rejected, pending, and total requests,
+  - a current-month planner snapshot,
+  - recent request history with approval or rejection details.
+
 ### Administration
 
 The admin area is intentionally simple and currently acts as a proof-of-concept control panel.
@@ -77,20 +92,24 @@ It supports:
 
 ### Holiday support
 
-- Swedish public holidays are generated dynamically through a dedicated calendar helper.
+- Public holidays are generated dynamically through a dedicated calendar helper.
+- Supported holiday calendars currently include Sweden, Denmark, Norway, Finland, Germany, the United Kingdom, and the United States.
 - Both fixed and moveable holidays are supported.
-- Seed data covers a rolling range from five years back to five years forward from the current year.
-- Stored holiday rows can still override or supplement generated values.
+- Holiday data is user-specific through `users.holiday_country`.
+- Stored holiday rows are country-aware through `holidays.country_code` and can still override or supplement generated values.
+- Seed data covers a rolling range from five years back to five years forward from the current year for every supported country.
 
 ## Data model highlights
 
 Recent updates introduced a more complete leave workflow model:
 
 - `users.manager_id` links users to a manager.
+- `users.holiday_country` stores the selected public-holiday calendar for each user.
 - `absences.status` stores `pending`, `approved`, or `rejected`.
 - `absences.request_uuid` groups multiple dates into one request.
 - `absences.approved_by` and `absences.approved_at` track approvals.
 - `absence_options` stores configurable leave types.
+- `holidays.country_code` scopes stored holiday overrides to a specific country.
 - `settings` stores application-level configuration such as the product name.
 
 ## Tech stack
@@ -158,7 +177,7 @@ The seeded environment provides:
 - generated personnel,
 - manager assignments within each department,
 - seeded absence options,
-- seeded Swedish holidays,
+- seeded holidays for all supported countries,
 - sample absence history.
 
 On first visit, the application automatically stores the first available user in session as the active user.
@@ -167,13 +186,17 @@ On first visit, the application automatically stores the first available user in
 
 - `app/Livewire/VacationPlanner.php` — main planner logic and request workflow.
 - `app/Http/Controllers/AdminController.php` — admin actions.
+- `app/Http/Controllers/ProfileController.php` — current-user profile and holiday-country updates.
 - `app/Http/Middleware/EnsureCurrentUser.php` — ensures an active session user exists.
 - `app/Models/Absence.php` — absence entity and approval fields.
 - `app/Models/AbsenceOption.php` — configurable absence types.
+- `app/Models/Holiday.php` — stored holiday overrides, now scoped by country.
 - `app/Models/Setting.php` — simple key/value settings.
-- `app/Support/SwedishHolidayCalendar.php` — dynamic Swedish holiday generation.
+- `app/Support/HolidayCalendar.php` — country-aware holiday resolution.
+- `app/Support/SwedishHolidayCalendar.php` — Swedish holiday generation used by the shared resolver.
 - `resources/views/livewire/vacation-planner.blade.php` — planner UI.
 - `resources/views/admin/index.blade.php` — admin workspace.
+- `resources/views/profile/show.blade.php` — profile workspace.
 - `resources/views/components/layouts/app.blade.php` — branded shared layout.
 
 ## Test coverage
@@ -184,7 +207,8 @@ The repository includes coverage for:
 - approval flow behavior,
 - pending request editing and deletion,
 - multi-select filtering,
-- holiday generation,
+- user-specific holiday generation,
+- profile page rendering and profile updates,
 - planner navigation across year boundaries,
 - admin application name updates.
 

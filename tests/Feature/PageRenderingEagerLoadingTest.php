@@ -73,5 +73,11 @@ class PageRenderingEagerLoadingTest extends TestCase
             ->get(route('admin.logs'))
             ->assertOk()
             ->assertSeeText('Request log');
+
+        $this
+            ->withSession(['current_user_id' => $employee->id])
+            ->get(route('profile.show'))
+            ->assertOk()
+            ->assertSeeText('Ella Employee');
     }
 }

@@ -26,7 +26,7 @@ class AdminController extends Controller
             'currentUser' => $currentUser,
             'layoutCurrentUser' => $currentUser,
             'users' => User::query()
-                ->select(['id', 'department_id', 'manager_id', 'name', 'location'])
+                ->select(['id', 'department_id', 'manager_id', 'name', 'location', 'is_active'])
                 ->with(['department:id,name', 'manager:id,name'])
                 ->orderBy('name')
                 ->get(),
@@ -107,7 +107,10 @@ class AdminController extends Controller
     public function impersonate(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'user_id' => ['required', Rule::exists('users', 'id')],
+            'user_id' => [
+                'required',
+                Rule::exists('users', 'id')->where(fn ($query) => $query->where('is_active', true)),
+            ],
         ]);
 
         $request->session()->put('current_user_id', (int) $data['user_id']);
@@ -117,6 +120,64 @@ class AdminController extends Controller
         return redirect()
             ->route('admin.index')
             ->with('status', sprintf('You are now impersonating %s.', $name));
+    }
+
+    public function updateUserActivity(Request $request, User $user): RedirectResponse
+    {
+        $shouldActivate = ! $user->is_active;
+        $actorId = $request->session()->get('current_user_id');
+
+        if (! $shouldActivate && User::query()->active()->count() <= 1) {
+            return redirect()
+                ->route('admin.index')
+                ->withErrors(['user_activity' => 'At least one active user must remain available.']);
+        }
+
+        DB::transaction(function () use ($actorId, $shouldActivate, $user) {
+            $previousIsActive = (bool) $user->is_active;
+
+            $user->update([
+                'is_active' => $shouldActivate,
+            ]);
+
+            AbsenceRequestLog::query()->create([
+                'request_uuid' => null,
+                'user_id' => $user->id,
+                'actor_id' => is_numeric($actorId) ? (int) $actorId : null,
+                'action' => $shouldActivate
+                    ? AbsenceRequestLog::ACTION_USER_REACTIVATED
+                    : AbsenceRequestLog::ACTION_USER_INACTIVATED,
+                'absence_type' => null,
+                'status' => $shouldActivate ? 'active' : 'inactive',
+                'date_start' => null,
+                'date_end' => null,
+                'date_count' => 0,
+                'reason' => $shouldActivate
+                    ? 'User reactivated from the admin panel.'
+                    : 'User marked inactive from the admin panel.',
+                'metadata' => [
+                    'source' => 'admin_user_management',
+                    'before' => ['is_active' => $previousIsActive],
+                    'after' => ['is_active' => $shouldActivate],
+                ],
+            ]);
+        });
+
+        if (! $shouldActivate && (int) $request->session()->get('current_user_id') === $user->id) {
+            $replacementUserId = User::query()->active()->orderBy('id')->value('id');
+
+            if ($replacementUserId !== null) {
+                $request->session()->put('current_user_id', (int) $replacementUserId);
+            } else {
+                $request->session()->forget('current_user_id');
+            }
+        }
+
+        return redirect()
+            ->route('admin.index')
+            ->with('status', $shouldActivate
+                ? sprintf('%s was reactivated.', $user->name)
+                : sprintf('%s was marked inactive.', $user->name));
     }
 
     public function storeAbsenceOption(Request $request): RedirectResponse
@@ -228,7 +289,8 @@ class AdminController extends Controller
         }
 
         return User::query()
-            ->select(['id', 'department_id', 'manager_id', 'name', 'location'])
+            ->active()
+            ->select(['id', 'department_id', 'manager_id', 'name', 'location', 'holiday_country'])
             ->with(['department:id,name', 'manager:id,name'])
             ->find($currentUserId);
     }

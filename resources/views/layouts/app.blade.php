@@ -383,6 +383,16 @@
                             </span>
                         </a>
 
+                        <a href="{{ route('profile.show') }}" class="sidebar-link {{ request()->routeIs('profile.*') ? 'active' : '' }}">
+                            <span class="sidebar-link-icon">
+                                <span class="icon">person</span>
+                            </span>
+                            <span class="sidebar-link-copy">
+                                <span class="sidebar-link-title">Profile</span>
+                                <span class="sidebar-link-meta">Holiday country and request history</span>
+                            </span>
+                        </a>
+
                         <a href="{{ route('admin.index') }}" class="sidebar-link {{ request()->routeIs('admin.*') ? 'active' : '' }}">
                             <span class="sidebar-link-icon">
                                 <span class="icon">tune</span>

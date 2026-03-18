@@ -11,6 +11,8 @@ class AbsenceRequestLog extends Model
     public const ACTION_DELETED = 'deleted';
     public const ACTION_APPROVED = 'approved';
     public const ACTION_REJECTED = 'rejected';
+    public const ACTION_USER_INACTIVATED = 'user_inactivated';
+    public const ACTION_USER_REACTIVATED = 'user_reactivated';
 
     protected $fillable = [
         'request_uuid',
@@ -43,6 +45,8 @@ class AbsenceRequestLog extends Model
             self::ACTION_DELETED => 'Deleted',
             self::ACTION_APPROVED => 'Approved',
             self::ACTION_REJECTED => 'Rejected',
+            self::ACTION_USER_INACTIVATED => 'User Inactivated',
+            self::ACTION_USER_REACTIVATED => 'User Reactivated',
         ];
     }
 

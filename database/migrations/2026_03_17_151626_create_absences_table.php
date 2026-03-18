@@ -11,10 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('absences', function (Illuminate\Database\Schema\Blueprint $table) {
+        Schema::create('absences', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('type', 20); // S, FL, B
+            $table->string('type', 20);
             $table->string('reason')->nullable();
             $table->string('status', 30)->default('approved')->index();
             $table->uuid('request_uuid')->nullable()->index();

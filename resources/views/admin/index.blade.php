@@ -3,7 +3,9 @@
     $shouldOpenAddOptionModal = $errors->any()
         && old('option_id') === null
         && (old('code') !== null || old('label') !== null || old('color') !== null);
+    $activeUserCount = $users->where('is_active', true)->count();
     $impersonationUsers = $users
+        ->filter(fn ($user) => $user->is_active)
         ->map(function ($user) {
             $departmentName = $user->department?->name ?? 'No department';
             $locationName = $user->location ?: 'No location';
@@ -415,6 +417,33 @@
             font-weight: 700;
         }
 
+        .admin-chip.muted {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .admin-chip.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .admin-chip.warning {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .admin-user-row.inactive td {
+            color: #64748b;
+            background: rgba(248, 250, 252, 0.85);
+        }
+
+        .admin-helper-text {
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.5;
+            margin: 0;
+        }
+
         .option-dot {
             width: 12px;
             height: 12px;
@@ -512,7 +541,7 @@
 
         <section class="admin-card">
             <h2>Impersonate a user</h2>
-            <p style="color: #475569;">Switch the active user stored in the session. Use <strong>*</strong> as a wildcard when searching.</p>
+            <p style="color: #475569;">Switch the active user stored in the session. Only active users appear here. Use <strong>*</strong> as a wildcard when searching.</p>
 
             <form method="POST" action="{{ route('admin.impersonate') }}" class="admin-form">
                 @csrf
@@ -761,20 +790,49 @@
 
     <section class="admin-card">
         <h2>Users and managers</h2>
+        <p style="color: #475569; max-width: 760px;">Inactive users are hidden from impersonation, session fallback, planner filters, and planner rosters until they are reactivated.</p>
         <table class="admin-table">
             <thead>
                 <tr>
                     <th>User</th>
                     <th>Department</th>
                     <th>Manager</th>
+                    <th>Status</th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($users as $user)
-                    <tr>
+                    @php
+                        $canDeactivate = $user->is_active && $activeUserCount > 1;
+                    @endphp
+                    <tr class="admin-user-row {{ $user->is_active ? '' : 'inactive' }}">
                         <td>{{ $user->name }}</td>
                         <td>{{ $user->department?->name ?? '—' }}</td>
                         <td>{{ $user->manager?->name ?? 'No manager' }}</td>
+                        <td>
+                            <span class="admin-chip {{ $user->is_active ? 'success' : 'warning' }}">
+                                {{ $user->is_active ? 'Active' : 'Inactive' }}
+                            </span>
+                        </td>
+                        <td>
+                            <form method="POST" action="{{ route('admin.users.activity', $user) }}" class="admin-form" style="gap: 8px;">
+                                @csrf
+                                @method('PATCH')
+
+                                <button
+                                    type="submit"
+                                    class="admin-button {{ $user->is_active ? 'secondary' : '' }}"
+                                    @disabled($user->is_active && ! $canDeactivate)
+                                >
+                                    {{ $user->is_active ? 'Mark inactive' : 'Reactivate' }}
+                                </button>
+
+                                @if ($user->is_active && ! $canDeactivate)
+                                    <p class="admin-helper-text">At least one active user must remain.</p>
+                                @endif
+                            </form>
+                        </td>
                     </tr>
                 @endforeach
             </tbody>

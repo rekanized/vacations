@@ -2,11 +2,21 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class User extends Model
 {
-    protected $fillable = ['department_id', 'manager_id', 'name', 'location'];
+    protected $fillable = ['department_id', 'manager_id', 'name', 'location', 'holiday_country', 'is_active'];
+
+    protected $casts = [
+        'is_active' => 'bool',
+    ];
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
 
     public function department(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {

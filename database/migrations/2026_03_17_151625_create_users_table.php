@@ -11,12 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('users', function (Illuminate\Database\Schema\Blueprint $table) {
+        Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->foreignId('department_id')->constrained()->cascadeOnDelete();
             $table->foreignId('manager_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('name');
             $table->string('location')->index();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }

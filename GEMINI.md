@@ -1,7 +1,7 @@
 # Project Context
 
 ## Product summary
-LeaveBoard is an internal leave-planning application built with Laravel and Livewire. The current product combines a multi-month visual planner with a lightweight admin workspace for impersonation, branding, and absence-type management.
+LeaveBoard is an internal leave-planning application built with Laravel and Livewire. The current product combines a multi-month visual planner, a current-user profile workspace, and a lightweight admin area for impersonation, branding, and absence-type management.
 
 ## Current functionality
 
@@ -12,6 +12,12 @@ LeaveBoard is an internal leave-planning application built with Laravel and Live
 * Expandable department sections with per-day department totals.
 * Live filtering by multiple departments, multiple sites, and personnel name search.
 * Current-user row spotlight and quick jump back to that row.
+* Holiday markers are resolved from the current user's configured holiday country.
+
+### Profile
+* `/profile` shows the current active user's profile workspace.
+* Users can update `users.holiday_country` from the profile page.
+* The profile page shows department, site, manager, request summaries, recent request outcomes, and a current-month planner snapshot.
 
 ### Approval flow
 * Users can have a manager through `users.manager_id`.
@@ -30,8 +36,11 @@ LeaveBoard is an internal leave-planning application built with Laravel and Live
 * Shows current users, managers, and configured absence options.
 
 ### Holidays and seed data
-* Swedish holidays are generated dynamically through `App\Support\SwedishHolidayCalendar`.
-* Holiday seeding covers a rolling range from current year - 5 to current year + 5.
+* Country-aware holidays are resolved through `App\Support\HolidayCalendar`.
+* Supported holiday calendars currently include SE, DK, NO, FI, DE, GB, and US.
+* Swedish holiday calculations still live in `App\Support\SwedishHolidayCalendar` and are used through the shared resolver.
+* Stored holiday rows are scoped by `holidays.country_code`.
+* Holiday seeding covers a rolling range from current year - 5 to current year + 5 for every supported country.
 * Personnel seeding now assigns a manager to most users in each department.
 * Default absence options are seeded from `AbsenceOptionSeeder`.
 
@@ -55,13 +64,17 @@ LeaveBoard is an internal leave-planning application built with Laravel and Live
 ## Important files
 * `app/Livewire/VacationPlanner.php` — planner state, filters, approvals, and request editing.
 * `app/Http/Controllers/AdminController.php` — admin page actions.
+* `app/Http/Controllers/ProfileController.php` — current-user profile page and holiday-country updates.
 * `app/Http/Middleware/EnsureCurrentUser.php` — current-user session bootstrap.
 * `app/Models/Absence.php` — approval-aware absence model.
 * `app/Models/AbsenceOption.php` — configurable leave types.
+* `app/Models/Holiday.php` — stored holiday overrides, keyed by country and date.
 * `app/Models/Setting.php` — persistent app settings.
+* `app/Support/HolidayCalendar.php` — computed country-aware public holidays.
 * `app/Support/SwedishHolidayCalendar.php` — computed Swedish public holidays.
 * `resources/views/livewire/vacation-planner.blade.php` — planner interface.
 * `resources/views/admin/index.blade.php` — admin workspace.
+* `resources/views/profile/show.blade.php` — current-user profile workspace.
 * `resources/views/components/layouts/app.blade.php` — branded shell layout.
 
 ## Livewire components

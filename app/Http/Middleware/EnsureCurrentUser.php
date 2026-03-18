@@ -13,14 +13,16 @@ class EnsureCurrentUser
     {
         $currentUserId = $request->session()->get('current_user_id');
 
-        if ($currentUserId && User::query()->whereKey($currentUserId)->exists()) {
+        if ($currentUserId && User::query()->active()->whereKey($currentUserId)->exists()) {
             return $next($request);
         }
 
-        $firstUserId = User::query()->orderBy('id')->value('id');
+        $firstUserId = User::query()->active()->orderBy('id')->value('id');
 
         if ($firstUserId !== null) {
             $request->session()->put('current_user_id', (int) $firstUserId);
+        } else {
+            $request->session()->forget('current_user_id');
         }
 
         return $next($request);
