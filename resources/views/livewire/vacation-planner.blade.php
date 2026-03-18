@@ -24,7 +24,7 @@
             <div class="planner-header-main">
                 <div class="planner-intro">
                     <div class="planner-intro-copy">
-                        <h1 class="planner-title">Absence planner</h1>
+                        <h1 class="planner-title">Planner</h1>
                         <span class="planner-subtitle">Review availability, filter teams, and drag across days to plan leave without jumping between views.</span>
                     </div>
 

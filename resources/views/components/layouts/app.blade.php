@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-        <title>{{ $title ?? (config('app.name', 'LeaveBoard') . ' · Absence Planner') }}</title>
+        <title>{{ $title ?? (config('app.name', 'LeaveBoard') . ' · Planner') }}</title>
 
         <link rel="icon" type="image/svg+xml" href="{{ asset('brand/leaveboard-mark.svg') }}">
         <link rel="preconnect" href="https://fonts.googleapis.com">
