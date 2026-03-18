@@ -16,14 +16,15 @@
         selectedManagers: @entangle('selectedManagers').live
     })"
     @mouseup.window="stopDragging()"
+    @blur.window="cancelDragging()"
+    @visibilitychange.document="handleVisibilityChange()"
 >
     <div class="planner-wrapper">
         <header class="planner-header">
             <div class="planner-header-main">
                 <div class="planner-intro">
                     <div class="planner-intro-copy">
-                        <span class="planner-eyebrow">Absence planner</span>
-                        <h1 class="planner-title">Team timeline</h1>
+                        <h1 class="planner-title">Absence planner</h1>
                         <span class="planner-subtitle">Review availability, filter teams, and drag across days to plan leave without jumping between views.</span>
                     </div>
 
@@ -440,8 +441,8 @@
                                          :class="{ 'cell-selected': isSelected({{ $user->id }}, {{ $index }}) }"
                                          @if($currentUser?->id === $user->id) data-current-user-cell="true" @endif
                                          @if($currentUser?->id === $user->id)
-                                         @mousedown="startDragging($event, {{ $user->id }}, {{ $index }})"
-                                         @mouseenter="dragEnter({{ $index }})"
+                                         @mousedown.prevent="startDragging($event, {{ $user->id }}, {{ $index }})"
+                                         @mouseenter="dragEnter($event, {{ $index }})"
                                          @endif
                                          title="{{ $date['holiday_name'] ?? '' }}">
                                         @if($isCurrent)
@@ -795,21 +796,54 @@
                     if (event.button !== 0) return;
                     if (this.editableUserId === null || this.editableUserId !== userId) return;
 
+                    this.cancelDragging();
+                    window.getSelection()?.removeAllRanges();
+
                     this.isDragging = true;
                     this.selectedUser = userId;
                     this.selectionStart = dateIndex;
                     this.selectionEnd = dateIndex;
                 },
 
-                dragEnter(dateIndex) {
+                dragEnter(event, dateIndex) {
                     if (!this.isDragging) return;
+
+                    if ((event.buttons & 1) !== 1) {
+                        this.cancelDragging();
+
+                        return;
+                    }
+
                     this.selectionEnd = dateIndex;
                 },
 
                 stopDragging() {
                     if (!this.isDragging) return;
+
                     this.isDragging = false;
+
+                    if (this.selectedUser === null || this.selectedRange.length === 0) {
+                        this.clearSelection();
+
+                        return;
+                    }
+
                     this.showModal = true;
+                },
+
+                cancelDragging() {
+                    if (!this.isDragging) return;
+
+                    this.isDragging = false;
+                    this.clearSelection();
+                },
+
+                handleVisibilityChange() {
+                    if (!document.hidden) {
+                        return;
+                    }
+
+                    this.cancelDragging();
                 },
 
                 get isEditModalOpen() {
@@ -1005,11 +1039,16 @@
                     this.mobileAbsenceType = this.absenceType ?? this.mobileAbsenceType;
                 },
 
-                reset() {
-                    this.showModal = false;
+                clearSelection() {
                     this.selectionStart = null;
                     this.selectionEnd = null;
                     this.selectedUser = null;
+                },
+
+                reset() {
+                    this.showModal = false;
+                    this.isDragging = false;
+                    this.clearSelection();
                     this.reason = '';
                 },
 
