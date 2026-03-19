@@ -203,6 +203,7 @@ php artisan optimize:clear
 
 ## Docker
 
+### Local Development
 For Docker, the app now runs behind Nginx with PHP-FPM instead of `php artisan serve`.
 
 Start the stack:
@@ -219,6 +220,33 @@ Notes:
 - `nginx` serves the public app and forwards PHP requests to the `app` service.
 - Docker uses `docker/nginx.conf`; the root `nginx.conf` remains reserved for Azure Web Apps.
 - The default compose file is intended for local use and keeps the setup free of Node tooling.
+
+### Deployment with Docker Hub
+You can run the full AbsenceBoard stack using Docker without cloning the repository. Create a `docker-compose.yml` file with the following content:
+
+```yaml
+services:
+  app:
+    image: rekanized/absenceboard:v1.0.0
+    restart: unless-stopped
+    volumes:
+      - /app/vendor
+      - ./database:/app/database
+      - ./storage:/app/storage
+  nginx:
+    image: rekanized/absenceboard-nginx:v1.0.0
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    depends_on:
+      - app
+```
+
+Then run:
+
+```bash
+docker compose up -d
+```
 
 ## Seeded Demo Setup
 
