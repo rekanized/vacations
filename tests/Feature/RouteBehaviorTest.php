@@ -18,6 +18,7 @@ class RouteBehaviorTest extends TestCase
             'name' => 'Asta Admin',
             'location' => 'Stockholm',
             'theme_preference' => 'dark',
+            'is_admin' => true,
         ]);
 
         $this
@@ -32,7 +33,7 @@ class RouteBehaviorTest extends TestCase
     public function test_admin_logs_route_displays_matching_request_logs(): void
     {
         $department = Department::create(['name' => 'Support']);
-        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
         $employee = $department->users()->create(['name' => 'Elsa Employee', 'location' => 'Gothenburg']);
 
         AbsenceRequestLog::create([
@@ -57,30 +58,97 @@ class RouteBehaviorTest extends TestCase
             ->assertSeeText('Family trip');
     }
 
-    public function test_admin_can_impersonate_another_user_via_the_route(): void
+    public function test_admin_can_grant_admin_access_to_another_user_via_the_route(): void
     {
         $department = Department::create(['name' => 'Finance']);
-        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
         $target = $department->users()->create(['name' => 'Nils Employee', 'location' => 'Malmö']);
 
         $this
             ->withSession(['current_user_id' => $admin->id])
-            ->post(route('admin.impersonate'), ['user_id' => $target->id])
-            ->assertRedirect(route('admin.index'))
-            ->assertSessionHas('current_user_id', $target->id)
-            ->assertSessionHas('status', 'You are now impersonating Nils Employee.');
+            ->patch(route('admin.users.admin', $target))
+            ->assertRedirect(route('admin.users'))
+            ->assertSessionHas('status', 'Nils Employee can now manage the admin workspace.');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $target->id,
+            'is_admin' => true,
+        ]);
+    }
+
+    public function test_admin_can_assign_a_manager_to_a_manual_user_via_the_route(): void
+    {
+        $department = Department::create(['name' => 'Finance']);
+        $admin = $department->users()->create([
+            'name' => 'Asta Admin',
+            'location' => 'Stockholm',
+            'email' => 'asta@example.test',
+            'password' => 'very-secure-password',
+            'is_admin' => true,
+        ]);
+        $manager = $department->users()->create([
+            'name' => 'Maja Manager',
+            'location' => 'Gothenburg',
+            'azure_oid' => 'azure-manager-oid',
+        ]);
+        $target = $department->users()->create([
+            'name' => 'Nils Employee',
+            'location' => 'Malmö',
+            'email' => 'nils@example.test',
+            'password' => 'another-secure-password',
+        ]);
+
+        $this
+            ->withSession(['current_user_id' => $admin->id])
+            ->patch(route('admin.users.manager', $target), ['manager_id' => $manager->id])
+            ->assertRedirect(route('admin.users'))
+            ->assertSessionHas('status', 'Nils Employee now reports to Maja Manager.');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $target->id,
+            'manager_id' => $manager->id,
+        ]);
+    }
+
+    public function test_admin_cannot_assign_a_manager_to_an_azure_managed_user_from_this_route(): void
+    {
+        $department = Department::create(['name' => 'Finance']);
+        $admin = $department->users()->create([
+            'name' => 'Asta Admin',
+            'location' => 'Stockholm',
+            'email' => 'asta@example.test',
+            'password' => 'very-secure-password',
+            'is_admin' => true,
+        ]);
+        $manager = $department->users()->create(['name' => 'Maja Manager', 'location' => 'Gothenburg']);
+        $target = $department->users()->create([
+            'name' => 'Azure Employee',
+            'location' => 'Malmö',
+            'azure_oid' => 'azure-employee-oid',
+        ]);
+
+        $this
+            ->withSession(['current_user_id' => $admin->id])
+            ->patch(route('admin.users.manager', $target), ['manager_id' => $manager->id])
+            ->assertRedirect(route('admin.users'))
+            ->assertSessionHasErrors('user_manager');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $target->id,
+            'manager_id' => null,
+        ]);
     }
 
     public function test_admin_can_mark_a_user_inactive_via_the_route(): void
     {
         $department = Department::create(['name' => 'Finance']);
-        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
         $target = $department->users()->create(['name' => 'Nils Employee', 'location' => 'Malmö']);
 
         $this
             ->withSession(['current_user_id' => $admin->id])
             ->patch(route('admin.users.activity', $target))
-            ->assertRedirect(route('admin.index'))
+            ->assertRedirect(route('admin.users'))
             ->assertSessionHas('status', 'Nils Employee was marked inactive.');
 
         $this->assertDatabaseHas('users', [
@@ -97,10 +165,33 @@ class RouteBehaviorTest extends TestCase
         ]);
     }
 
+    public function test_admin_who_marks_their_own_account_inactive_is_signed_out_instead_of_becoming_another_user(): void
+    {
+        $department = Department::create(['name' => 'Finance']);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
+        $otherUser = $department->users()->create(['name' => 'Nils Employee', 'location' => 'Malmö']);
+
+        $this->withSession(['current_user_id' => $admin->id])
+            ->patch(route('admin.users.activity', $admin))
+            ->assertRedirect(route('home'))
+            ->assertSessionHas('status', 'Your account was marked inactive and your session was signed out.')
+            ->assertSessionMissing('current_user_id');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $admin->id,
+            'is_active' => false,
+        ]);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $otherUser->id,
+            'is_active' => true,
+        ]);
+    }
+
     public function test_admin_logs_route_displays_user_inactivation_entries(): void
     {
         $department = Department::create(['name' => 'Support']);
-        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
         $employee = $department->users()->create(['name' => 'Elsa Employee', 'location' => 'Gothenburg']);
 
         AbsenceRequestLog::create([
@@ -126,44 +217,29 @@ class RouteBehaviorTest extends TestCase
             ->assertSeeText('Admin user management');
     }
 
-    public function test_inactive_users_cannot_be_impersonated(): void
+    public function test_last_admin_cannot_be_revoked(): void
     {
         $department = Department::create(['name' => 'Finance']);
-        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
-        $inactiveUser = $department->users()->create(['name' => 'Nils Employee', 'location' => 'Malmö', 'is_active' => false]);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
 
         $this
-            ->from(route('admin.index'))
+            ->from(route('admin.users'))
             ->withSession(['current_user_id' => $admin->id])
-            ->post(route('admin.impersonate'), ['user_id' => $inactiveUser->id])
-            ->assertRedirect(route('admin.index'))
-            ->assertSessionHasErrors('user_id');
-    }
-
-    public function test_inactive_session_user_falls_back_to_the_first_active_user(): void
-    {
-        $department = Department::create(['name' => 'Finance']);
-        $inactiveUser = $department->users()->create(['name' => 'Inactive Ingrid', 'location' => 'Stockholm', 'is_active' => false]);
-        $activeUser = $department->users()->create(['name' => 'Active Asta', 'location' => 'Malmö']);
-
-        $this
-            ->withSession(['current_user_id' => $inactiveUser->id])
-            ->get(route('admin.index'))
-            ->assertOk()
-            ->assertSessionHas('current_user_id', $activeUser->id)
-            ->assertSeeText('Active Asta');
+            ->patch(route('admin.users.admin', $admin))
+            ->assertRedirect(route('admin.users'))
+            ->assertSessionHasErrors('user_admin');
     }
 
     public function test_last_active_user_cannot_be_marked_inactive(): void
     {
         $department = Department::create(['name' => 'Finance']);
-        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
 
         $this
-            ->from(route('admin.index'))
+            ->from(route('admin.users'))
             ->withSession(['current_user_id' => $admin->id])
             ->patch(route('admin.users.activity', $admin))
-            ->assertRedirect(route('admin.index'))
+            ->assertRedirect(route('admin.users'))
             ->assertSessionHasErrors('user_activity');
 
         $this->assertDatabaseHas('users', [
@@ -175,7 +251,7 @@ class RouteBehaviorTest extends TestCase
     public function test_admin_can_store_a_new_absence_option_via_the_route(): void
     {
         $department = Department::create(['name' => 'Operations']);
-        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
 
         $this
             ->withSession(['current_user_id' => $admin->id])
@@ -184,7 +260,7 @@ class RouteBehaviorTest extends TestCase
                 'label' => 'Work from home',
                 'color' => '#22c55e',
             ])
-            ->assertRedirect(route('admin.index'))
+            ->assertRedirect(route('admin.settings'))
             ->assertSessionHas('status', 'Absence option Work from home was added.');
 
         $this->assertDatabaseHas('absence_options', [

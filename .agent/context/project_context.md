@@ -1,9 +1,15 @@
 # Project Context: LeaveBoard
 
 ## Overview
-LeaveBoard is an internal leave-planning application for visualising team availability and processing absence requests. The product centers on a multi-month planner, a profile workspace for the active session user, and a lightweight admin page for operational controls.
+LeaveBoard is an internal leave-planning application for visualising team availability and processing absence requests. The product centers on a multi-month planner, a landing/authentication entry flow, a profile workspace for the active session user, and a split admin workspace for operational controls.
 
 ## User-Facing Areas
+
+### Landing and Authentication
+- Landing page at `/` with Microsoft sign-in and manual sign-in entry points
+- First-run setup flow when no users exist yet
+- Dedicated manual sign-in page at `/login/manual`
+- Manual sign-in page remains reachable even when no manual accounts exist, and explains that an admin must create one first
 
 ### Planner
 - Multi-month timeline covering the selected month and the following two months
@@ -20,11 +26,11 @@ LeaveBoard is an internal leave-planning application for visualising team availa
 - Request summaries, request history, and current-month snapshot
 
 ### Admin
-- Session-based user impersonation
-- Application name updates through settings
-- Absence-option creation and editing
-- User and manager overview
-- Request log browsing
+- Expandable sidebar admin navigation
+- Dedicated `/admin/authentication` page for Azure configuration and verification
+- Dedicated `/admin/users` page for manual-user creation, admin delegation, and user status management
+- Dedicated `/admin/settings` page for application settings and absence-option management
+- Dedicated `/admin/logs` page for request log browsing
 
 ## Workflow Rules
 - Requests from users with a manager are submitted as pending.
@@ -40,6 +46,14 @@ LeaveBoard is an internal leave-planning application for visualising team availa
 - `holidays.country_code` scopes stored holiday overrides.
 - `users.theme_preference` persists light/dark mode across pages.
 
+## Authentication and Access
+- Azure tenant sign-in is the recommended authentication path.
+- Manual email/password accounts are supported as a fallback or bootstrap path.
+- The first successful Azure sign-in becomes the first admin when no users exist yet.
+- Manual admins can be created during setup when Azure is not ready.
+- Admins can later create additional manual users from the dedicated user-information admin page.
+- Inactive users cannot sign in or access planner/admin pages.
+
 ## Seeded Environment
-- Seeders provide departments, users, manager assignments, absence options, holidays, and sample absence history.
-- First visit stores the first available user in session as the current active user.
+- Seeders provide absence options and holidays for a clean first install.
+- Users are created through authentication setup rather than seeded into the database.

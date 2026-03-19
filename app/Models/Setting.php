@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 
 class Setting extends Model
 {
@@ -41,5 +43,36 @@ class Setting extends Model
         static::$valueCache[$key] = static::query()->where('key', $key)->value('value');
 
         return static::$valueCache[$key] ?? $default;
+    }
+
+    public static function encryptedValueFor(string $key, ?string $default = null): ?string
+    {
+        $value = static::valueFor($key);
+
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        try {
+            return Crypt::decryptString($value);
+        } catch (\Throwable $exception) {
+            throw new RuntimeException(sprintf('Unable to decrypt the setting [%s].', $key), previous: $exception);
+        }
+    }
+
+    public static function writeValue(string $key, ?string $value): void
+    {
+        static::query()->updateOrCreate(
+            ['key' => $key],
+            ['value' => $value]
+        );
+    }
+
+    public static function writeEncryptedValue(string $key, ?string $value): void
+    {
+        static::writeValue(
+            $key,
+            filled($value) ? Crypt::encryptString($value) : null,
+        );
     }
 }

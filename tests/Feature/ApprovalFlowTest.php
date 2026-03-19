@@ -14,17 +14,21 @@ class ApprovalFlowTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_root_route_signs_in_as_the_first_user_when_no_user_is_in_session(): void
+    public function test_root_route_shows_the_landing_page_when_users_exist_but_no_one_is_signed_in(): void
     {
         $department = Department::create(['name' => 'Engineering']);
-        $firstUser = $department->users()->create(['name' => 'Asta First', 'location' => 'Stockholm']);
-        $department->users()->create(['name' => 'Bertil Second', 'location' => 'Göteborg']);
+        $department->users()->create([
+            'name' => 'Asta First',
+            'email' => 'asta@example.test',
+            'password' => 'manual-password',
+            'location' => 'Stockholm',
+        ]);
 
         $response = $this->get('/');
 
         $response->assertOk();
-        $response->assertSessionHas('current_user_id', $firstUser->id);
-        $response->assertSeeText('Asta First');
+        $response->assertSessionMissing('current_user_id');
+        $response->assertSeeText('Manual sign-in');
     }
 
     public function test_absence_request_is_pending_when_the_user_has_a_manager(): void
@@ -125,6 +129,70 @@ class ApprovalFlowTest extends TestCase
 
         $this->assertSame(Absence::STATUS_APPROVED, $absence->status);
         $this->assertSame($user->id, $absence->approved_by);
+    }
+
+    public function test_existing_absences_cannot_be_overwritten_by_submitting_a_new_request(): void
+    {
+        AbsenceOption::create(['code' => 'S', 'label' => 'Vacation', 'color' => '#4ade80', 'sort_order' => 1]);
+        AbsenceOption::create(['code' => 'B', 'label' => 'Parental leave', 'color' => '#facc15', 'sort_order' => 2]);
+
+        $department = Department::create(['name' => 'Sales']);
+        $user = $department->users()->create(['name' => 'Solo User', 'location' => 'Malmö']);
+
+        Absence::create([
+            'user_id' => $user->id,
+            'type' => 'S',
+            'reason' => 'Approved vacation',
+            'status' => Absence::STATUS_APPROVED,
+            'request_uuid' => 'approved-request',
+            'approved_by' => $user->id,
+            'approved_at' => now(),
+            'date' => '2026-08-04',
+        ]);
+
+        session(['current_user_id' => $user->id]);
+
+        Livewire::test(VacationPlanner::class)
+            ->call('applyAbsence', $user->id, ['2026-08-04'], 'B', 'Replacement request');
+
+        $this->assertDatabaseCount('absences', 1);
+        $this->assertDatabaseHas('absences', [
+            'user_id' => $user->id,
+            'date' => '2026-08-04',
+            'type' => 'S',
+            'status' => Absence::STATUS_APPROVED,
+            'request_uuid' => 'approved-request',
+        ]);
+    }
+
+    public function test_approved_absence_cannot_be_deleted_through_the_grid_action(): void
+    {
+        AbsenceOption::create(['code' => 'S', 'label' => 'Vacation', 'color' => '#4ade80', 'sort_order' => 1]);
+
+        $department = Department::create(['name' => 'Sales']);
+        $user = $department->users()->create(['name' => 'Solo User', 'location' => 'Malmö']);
+
+        Absence::create([
+            'user_id' => $user->id,
+            'type' => 'S',
+            'reason' => 'Approved vacation',
+            'status' => Absence::STATUS_APPROVED,
+            'request_uuid' => 'approved-request',
+            'approved_by' => $user->id,
+            'approved_at' => now(),
+            'date' => '2026-08-04',
+        ]);
+
+        session(['current_user_id' => $user->id]);
+
+        Livewire::test(VacationPlanner::class)
+            ->call('removeAbsence', $user->id, ['2026-08-04']);
+
+        $this->assertDatabaseHas('absences', [
+            'user_id' => $user->id,
+            'date' => '2026-08-04',
+            'status' => Absence::STATUS_APPROVED,
+        ]);
     }
 
     public function test_pending_absence_request_can_be_updated_by_the_request_owner(): void

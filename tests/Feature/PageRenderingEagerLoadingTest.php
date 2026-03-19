@@ -27,6 +27,7 @@ class PageRenderingEagerLoadingTest extends TestCase
         $manager = $department->users()->create([
             'name' => 'Maja Manager',
             'location' => 'Stockholm',
+            'is_admin' => true,
         ]);
         $employee = $department->users()->create([
             'name' => 'Ella Employee',
@@ -69,9 +70,21 @@ class PageRenderingEagerLoadingTest extends TestCase
 
         $this
             ->withSession(['current_user_id' => $manager->id])
-            ->get(route('admin.index'))
+            ->get(route('admin.settings'))
             ->assertOk()
             ->assertSeeText('Maja Manager');
+
+        $this
+            ->withSession(['current_user_id' => $manager->id])
+            ->get(route('admin.authentication'))
+            ->assertOk()
+            ->assertSeeText('Azure authentication');
+
+        $this
+            ->withSession(['current_user_id' => $manager->id])
+            ->get(route('admin.users'))
+            ->assertOk()
+            ->assertSeeText('Users and permissions');
 
         $this
             ->withSession(['current_user_id' => $manager->id])

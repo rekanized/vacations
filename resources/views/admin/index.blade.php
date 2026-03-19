@@ -1,100 +1,13 @@
 <x-layouts.app :layout-current-user="$layoutCurrentUser">
-@php
-    $shouldOpenAddOptionModal = $errors->any()
-        && old('option_id') === null
-        && (old('code') !== null || old('label') !== null || old('color') !== null);
-    $activeUserCount = $users->where('is_active', true)->count();
-    $impersonationUsers = $users
-        ->filter(fn ($user) => $user->is_active)
-        ->map(function ($user) {
-            $departmentName = $user->department?->name ?? 'No department';
-            $locationName = $user->location ?: 'No location';
-            $managerName = $user->manager?->name ?? 'No manager';
-
-            return [
-                'id' => (string) $user->id,
-                'name' => $user->name,
-                'department' => $departmentName,
-                'location' => $locationName,
-                'manager' => $managerName,
-                'label' => sprintf('%s · %s · %s', $user->name, $departmentName, $locationName),
-                'search' => implode(' ', [
-                    $user->name,
-                    $departmentName,
-                    $locationName,
-                ]),
-            ];
-        })
-        ->values();
-    $initialImpersonationUserId = (string) old('user_id', '');
-@endphp
-
-<div
-    x-data="{
-        showAddOptionModal: @js($shouldOpenAddOptionModal),
-        impersonationUsers: @js($impersonationUsers),
-        impersonationOpen: false,
-        impersonationQuery: '',
-        selectedImpersonationUserId: @js($initialImpersonationUserId),
-        init() {
-            this.syncImpersonationQuery();
-        },
-        get selectedImpersonationUser() {
-            return this.impersonationUsers.find((user) => String(user.id) === String(this.selectedImpersonationUserId)) ?? null;
-        },
-        get filteredImpersonationUsers() {
-            const query = this.impersonationQuery.trim();
-
-            if (!query) {
-                return this.impersonationUsers;
-            }
-
-            const normalized = query.toLowerCase();
-            const wildcardQuery = normalized.includes('*') ? normalized : `*${normalized}*`;
-            const escaped = wildcardQuery.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-            const matcher = new RegExp(escaped, 'i');
-
-            return this.impersonationUsers.filter((user) => matcher.test(user.search.toLowerCase()));
-        },
-        get visibleImpersonationUsers() {
-            return this.filteredImpersonationUsers.slice(0, 50);
-        },
-        syncImpersonationQuery() {
-            this.impersonationQuery = this.selectedImpersonationUser?.label ?? '';
-        },
-        openImpersonationDropdown() {
-            this.impersonationOpen = true;
-        },
-        closeImpersonationDropdown() {
-            this.impersonationOpen = false;
-            this.syncImpersonationQuery();
-        },
-        clearImpersonationQuery() {
-            this.impersonationQuery = '';
-            this.impersonationOpen = true;
-        },
-        selectImpersonationUser(user) {
-            this.selectedImpersonationUserId = String(user.id);
-            this.impersonationQuery = user.label;
-            this.impersonationOpen = false;
-        },
-        selectFirstVisibleImpersonationUser() {
-            if (this.visibleImpersonationUsers.length === 0) {
-                return;
-            }
-
-            this.selectImpersonationUser(this.visibleImpersonationUsers[0]);
-        }
-    }"
-    @keydown.escape.window="showAddOptionModal = false"
-    class="page-shell page-shell-admin"
->
-
-    <section class="admin-card">
-        <h1 style="font-size: 28px;">Admin proof of concept</h1>
-        <p style="color: #475569; max-width: 760px;">
-            Anyone can access this page. Use it to impersonate a user and add, edit, or delete absence options while the approval flow is being validated.
-        </p>
+<div class="page-shell page-shell-admin">
+    <section class="admin-card admin-stack">
+        <div>
+            <p class="planner-kicker">Admin workspace</p>
+            <h1 style="font-size: 28px; margin-bottom: 12px;">Application settings</h1>
+            <p style="color: var(--text-soft); max-width: 760px; margin: 0;">
+                Manage product-facing settings and planner configuration here. Authentication and user administration now live in their own dedicated admin pages.
+            </p>
+        </div>
 
         @if ($errors->any())
             <ul class="error-list">
@@ -106,10 +19,8 @@
 
         @if ($currentUser)
             <div class="admin-chip">
-                Acting as {{ $currentUser->name }}
-                @if ($currentUser->manager)
-                    <span style="color: #475569; font-weight: 600;">· Manager: {{ $currentUser->manager->name }}</span>
-                @endif
+                Signed in as {{ $currentUser->name }}
+                <span style="color: var(--text-soft); font-weight: 600;">· {{ $currentUser->is_admin ? 'Admin' : 'Standard user' }}</span>
             </div>
         @endif
     </section>
@@ -117,7 +28,7 @@
     <div class="admin-grid">
         <section class="admin-card">
             <h2>Application name</h2>
-            <p style="color: #475569;">Change the product name shown in the sidebar and page title.</p>
+            <p style="color: var(--text-soft);">Change the product name shown in the sidebar and browser title.</p>
 
             <form method="POST" action="{{ route('admin.application-name.update') }}" class="admin-form">
                 @csrf
@@ -126,84 +37,13 @@
                     <input name="app_name" class="admin-input" maxlength="80" value="{{ old('app_name', $applicationName) }}" placeholder="LeaveBoard">
                 </label>
 
-                <x-loading-button type="submit" class="admin-button">Save name</x-loading-button>
-            </form>
-        </section>
-
-        <section class="admin-card">
-            <h2>Impersonate a user</h2>
-            <p style="color: #475569;">Switch the active user stored in the session. Only active users appear here. Use <strong>*</strong> as a wildcard when searching.</p>
-
-            <form method="POST" action="{{ route('admin.impersonate') }}" class="admin-form">
-                @csrf
-                <label class="admin-label">
-                    User
-                    <div class="admin-combobox" @click.outside="closeImpersonationDropdown()">
-                        <input type="hidden" name="user_id" :value="selectedImpersonationUserId">
-
-                        <div class="admin-combobox-input-wrap">
-                            <input
-                                type="text"
-                                class="admin-input admin-combobox-input"
-                                x-model="impersonationQuery"
-                                @focus="openImpersonationDropdown()"
-                                @click="openImpersonationDropdown()"
-                                @input="openImpersonationDropdown()"
-                                @keydown.enter.prevent="selectFirstVisibleImpersonationUser()"
-                                @keydown.escape.prevent.stop="closeImpersonationDropdown()"
-                                placeholder="Search user, department, or location"
-                                autocomplete="off"
-                                spellcheck="false"
-                            >
-
-                            <button
-                                type="button"
-                                class="admin-combobox-clear"
-                                @click="clearImpersonationQuery()"
-                                x-show="impersonationQuery !== ''"
-                                x-cloak
-                                aria-label="Clear user search"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        <div class="admin-combobox-dropdown" x-show="impersonationOpen" x-cloak>
-                            <div class="admin-combobox-list">
-                                <template x-if="visibleImpersonationUsers.length === 0">
-                                    <div class="admin-combobox-empty">
-                                        No users matched that search.
-                                    </div>
-                                </template>
-
-                                <template x-for="user in visibleImpersonationUsers" :key="user.id">
-                                    <button
-                                        type="button"
-                                        class="admin-combobox-option"
-                                        :class="{ 'active': String(user.id) === String(selectedImpersonationUserId) }"
-                                        @click="selectImpersonationUser(user)"
-                                    >
-                                        <span class="admin-combobox-title" x-text="user.name"></span>
-                                        <span class="admin-combobox-meta" x-text="`${user.department} · ${user.location} · Manager: ${user.manager}`"></span>
-                                    </button>
-                                </template>
-                            </div>
-
-                            <div class="admin-combobox-footnote">
-                                <span x-text="filteredImpersonationUsers.length > 50 ? `Showing the first 50 of ${filteredImpersonationUsers.length} matches.` : `${filteredImpersonationUsers.length} match(es).`"></span>
-                                Type any part of the person details, or use <strong>*</strong> as a wildcard.
-                            </div>
-                        </div>
-                    </div>
-                </label>
-
-                <x-loading-button type="submit" class="admin-button">Impersonate</x-loading-button>
+                <button type="submit" class="admin-button">Save name</button>
             </form>
         </section>
 
         <section class="admin-card">
             <h2>Request log</h2>
-            <p style="color: #475569;">
+            <p style="color: var(--text-soft);">
                 Review submitted, updated, approved, rejected, and deleted absence requests.
             </p>
 
@@ -215,19 +55,36 @@
         </section>
     </div>
 
-    <section class="admin-card">
-        <div class="admin-button-row" style="margin-bottom: 16px;">
-            <div>
-                <h2>Current absence options</h2>
-                <p style="color: var(--text-soft); max-width: 760px; margin-bottom: 0;">
-                    If an option has already been used, the warning below appears before you save or delete it.
-                </p>
-            </div>
-
-            <button type="button" class="admin-button" @click="showAddOptionModal = true">
-                Add absence option
-            </button>
+    <section class="admin-card admin-stack">
+        <div>
+            <h2>Absence options</h2>
+            <p style="color: var(--text-soft); max-width: 760px; margin-bottom: 0;">
+                If an option has already been used, the warning below appears before you save or delete it.
+            </p>
         </div>
+
+        <form method="POST" action="{{ route('admin.absence-options.store') }}" class="admin-form admin-form-inline">
+            @csrf
+
+            <label class="admin-label">
+                Code
+                <input name="code" class="admin-input" maxlength="10" value="{{ old('option_id') ? '' : old('code') }}" placeholder="WFH">
+            </label>
+
+            <label class="admin-label">
+                Label
+                <input name="label" class="admin-input" value="{{ old('option_id') ? '' : old('label') }}" placeholder="Work from home">
+            </label>
+
+            <label class="admin-label">
+                Color
+                <input type="color" name="color" class="admin-input" value="{{ old('option_id') ? '#4ade80' : old('color', '#4ade80') }}" style="padding: 6px 8px; min-height: 48px;">
+            </label>
+
+            <div class="admin-inline-actions">
+                <button type="submit" class="admin-button">Add option</button>
+            </div>
+        </form>
 
         <div class="admin-options-grid">
             @foreach ($absenceOptions as $option)
@@ -349,89 +206,6 @@
                 </article>
             @endforeach
         </div>
-    </section>
-
-    <div class="modal-overlay" x-show="showAddOptionModal" x-cloak x-transition>
-        <div class="modal-content" @click.away="showAddOptionModal = false" @click.stop>
-            <div>
-                <h2 class="modal-title">Add absence option</h2>
-                <p style="color: var(--text-soft); margin: 8px 0 0;">New options become available in the planner modal immediately.</p>
-            </div>
-
-            <form method="POST" action="{{ route('admin.absence-options.store') }}" class="admin-form">
-                @csrf
-                <label class="admin-label">
-                    Code
-                    <input name="code" class="admin-input" maxlength="10" value="{{ old('option_id') ? '' : old('code') }}" placeholder="WFH">
-                </label>
-
-                <label class="admin-label">
-                    Label
-                    <input name="label" class="admin-input" value="{{ old('option_id') ? '' : old('label') }}" placeholder="Work from home">
-                </label>
-
-                <label class="admin-label">
-                    Color
-                    <input type="color" name="color" class="admin-input" value="{{ old('option_id') ? '#4ade80' : old('color', '#4ade80') }}" style="padding: 6px 8px; min-height: 48px;">
-                </label>
-
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" @click="showAddOptionModal = false">Cancel</button>
-                    <x-loading-button type="submit" class="btn btn-primary">Add option</x-loading-button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <section class="admin-card">
-        <h2>Users and managers</h2>
-        <p style="color: #475569; max-width: 760px;">Inactive users are hidden from impersonation, session fallback, planner filters, and planner rosters until they are reactivated.</p>
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>User</th>
-                    <th>Department</th>
-                    <th>Manager</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($users as $user)
-                    @php
-                        $canDeactivate = $user->is_active && $activeUserCount > 1;
-                    @endphp
-                    <tr class="admin-user-row {{ $user->is_active ? '' : 'inactive' }}">
-                        <td>{{ $user->name }}</td>
-                        <td>{{ $user->department?->name ?? '—' }}</td>
-                        <td>{{ $user->manager?->name ?? 'No manager' }}</td>
-                        <td>
-                            <span class="admin-chip {{ $user->is_active ? 'success' : 'warning' }}">
-                                {{ $user->is_active ? 'Active' : 'Inactive' }}
-                            </span>
-                        </td>
-                        <td>
-                            <form method="POST" action="{{ route('admin.users.activity', $user) }}" class="admin-form" style="gap: 8px;">
-                                @csrf
-                                @method('PATCH')
-
-                                <x-loading-button
-                                    type="submit"
-                                    class="admin-button {{ $user->is_active ? 'secondary' : '' }}"
-                                    :disabled="$user->is_active && ! $canDeactivate"
-                                >
-                                    {{ $user->is_active ? 'Mark inactive' : 'Reactivate' }}
-                                </x-loading-button>
-
-                                @if ($user->is_active && ! $canDeactivate)
-                                    <p class="admin-helper-text">At least one active user must remain.</p>
-                                @endif
-                            </form>
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
     </section>
 </div>
 

@@ -69,15 +69,27 @@
                             </span>
                         </a>
 
-                        <a href="{{ route('admin.index') }}" class="sidebar-link {{ request()->routeIs('admin.*') ? 'active' : '' }}">
-                            <span class="sidebar-link-icon">
-                                <span class="icon">tune</span>
-                            </span>
-                            <span class="sidebar-link-copy">
-                                <span class="sidebar-link-title">Admin</span>
-                                <span class="sidebar-link-meta">Impersonation and setup tools</span>
-                            </span>
-                        </a>
+                        @if ($layoutCurrentUser?->is_admin)
+                            <details class="sidebar-nav-group" @if (request()->routeIs('admin.*')) open @endif>
+                                <summary class="sidebar-link sidebar-link-group {{ request()->routeIs('admin.*') ? 'active' : '' }}">
+                                    <span class="sidebar-link-icon">
+                                        <span class="icon">tune</span>
+                                    </span>
+                                    <span class="sidebar-link-copy">
+                                        <span class="sidebar-link-title">Admin</span>
+                                        <span class="sidebar-link-meta">Authentication, users, and application setup</span>
+                                    </span>
+                                    <span class="sidebar-link-expand icon">expand_more</span>
+                                </summary>
+
+                                <div class="sidebar-subnav">
+                                    <a href="{{ route('admin.authentication') }}" class="sidebar-sublink {{ request()->routeIs('admin.authentication') ? 'active' : '' }}">Authentication</a>
+                                    <a href="{{ route('admin.users') }}" class="sidebar-sublink {{ request()->routeIs('admin.users') ? 'active' : '' }}">User information</a>
+                                    <a href="{{ route('admin.settings') }}" class="sidebar-sublink {{ request()->routeIs('admin.settings') || request()->routeIs('admin.index') ? 'active' : '' }}">Application settings</a>
+                                    <a href="{{ route('admin.logs') }}" class="sidebar-sublink {{ request()->routeIs('admin.logs') ? 'active' : '' }}">Request log</a>
+                                </div>
+                            </details>
+                        @endif
                     </nav>
 
                     @if ($layoutCurrentUser)
@@ -97,16 +109,28 @@
                     <div class="sidebar-user">
                         <span class="sidebar-user-avatar">{{ $layoutInitials }}</span>
                         <span class="sidebar-user-copy">
-                            <span class="sidebar-user-label">Current user</span>
+                            <span class="sidebar-user-label">Signed in user</span>
                             <span class="sidebar-user-name">{{ $layoutCurrentUser->name }}</span>
-                            <span class="sidebar-user-meta">
-                                {{ $layoutCurrentUser->department?->name ?? 'No department set' }}
-                                @if ($layoutCurrentUser->manager)
-                                    <br>Manager: {{ $layoutCurrentUser->manager->name }}
-                                @endif
-                            </span>
+                            <span class="sidebar-user-meta">{{ $layoutCurrentUser->department?->name ?? 'No department set' }}</span>
+                            @if ($layoutCurrentUser->email)
+                                <span class="sidebar-user-meta">{{ $layoutCurrentUser->email }}</span>
+                            @endif
+                            @if ($layoutCurrentUser->manager)
+                                <span class="sidebar-user-meta">Manager: {{ $layoutCurrentUser->manager->name }}</span>
+                            @endif
+                            @if ($layoutCurrentUser->is_admin)
+                                <span class="sidebar-user-meta">Role: Admin</span>
+                            @endif
                         </span>
                     </div>
+
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="sidebar-footer-link sidebar-footer-button">
+                            <span class="icon">logout</span>
+                            <span>Sign out</span>
+                        </button>
+                    </form>
                 @endif
 
                 <a href="https://github.com/rekanized/vacations" class="sidebar-footer-link" target="_blank" rel="noopener noreferrer">

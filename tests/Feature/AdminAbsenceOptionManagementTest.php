@@ -15,7 +15,7 @@ class AdminAbsenceOptionManagementTest extends TestCase
     public function test_admin_can_update_a_used_absence_option_and_existing_requests_follow_a_code_change(): void
     {
         $department = Department::create(['name' => 'Engineering']);
-        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
         $employee = $department->users()->create(['name' => 'Nils Employee', 'location' => 'Gothenburg']);
 
         $option = AbsenceOption::create([
@@ -41,7 +41,7 @@ class AdminAbsenceOptionManagementTest extends TestCase
             ]);
 
         $response
-            ->assertRedirect(route('admin.index'))
+            ->assertRedirect(route('admin.settings'))
             ->assertSessionHas(
                 'status',
                 'Absence option Work from anywhere was updated. Warning acknowledged: 1 day(s) from 1 people already used this option. Existing days were moved to the new code.'
@@ -63,7 +63,7 @@ class AdminAbsenceOptionManagementTest extends TestCase
     public function test_admin_can_delete_a_used_absence_option_after_warning(): void
     {
         $department = Department::create(['name' => 'Engineering']);
-        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
+        $admin = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
         $employee = $department->users()->create(['name' => 'Nils Employee', 'location' => 'Gothenburg']);
 
         $option = AbsenceOption::create([
@@ -85,7 +85,7 @@ class AdminAbsenceOptionManagementTest extends TestCase
             ->delete(route('admin.absence-options.destroy', $option));
 
         $response
-            ->assertRedirect(route('admin.index'))
+            ->assertRedirect(route('admin.settings'))
             ->assertSessionHas(
                 'status',
                 'Absence option Sick day was deleted. Warning acknowledged: 1 day(s) from 1 people still reference the deleted code.'

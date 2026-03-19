@@ -264,6 +264,17 @@ class VacationPlanner extends Component
             return;
         }
 
+        $conflictingDates = Absence::query()
+            ->where('user_id', $userId)
+            ->whereIn('date', $dates)
+            ->pluck('date');
+
+        if ($conflictingDates->isNotEmpty()) {
+            session()->flash('status', 'Unable to create the request because one or more selected dates already have an absence.');
+
+            return;
+        }
+
         $status = $currentUser->manager_id ? Absence::STATUS_PENDING : Absence::STATUS_APPROVED;
         $requestUuid = (string) Str::uuid();
         $trimmedReason = trim($reason) !== '' ? trim($reason) : null;
@@ -271,7 +282,7 @@ class VacationPlanner extends Component
         DB::transaction(function () use ($dates, $requestUuid, $reason, $status, $trimmedReason, $type, $userId) {
             $timestamp = now();
 
-            Absence::query()->upsert(
+            Absence::query()->insert(
                 collect($dates)
                     ->map(fn (string $date) => [
                         'user_id' => $userId,
@@ -286,9 +297,7 @@ class VacationPlanner extends Component
                         'created_at' => $timestamp,
                         'updated_at' => $timestamp,
                     ])
-                    ->all(),
-                ['user_id', 'date'],
-                ['type', 'reason', 'decision_reason', 'status', 'request_uuid', 'approved_by', 'approved_at', 'updated_at']
+                    ->all()
             );
 
             $storedAbsences = Absence::query()
@@ -336,6 +345,7 @@ class VacationPlanner extends Component
 
         $absencesToDelete = Absence::query()
             ->where('user_id', $userId)
+            ->where('status', Absence::STATUS_PENDING)
             ->whereIn('date', $dates)
             ->orderBy('date')
             ->get();
@@ -347,6 +357,7 @@ class VacationPlanner extends Component
         DB::transaction(function () use ($absencesToDelete, $dates, $userId) {
             Absence::query()
                 ->where('user_id', $userId)
+                ->where('status', Absence::STATUS_PENDING)
                 ->whereIn('date', $dates)
                 ->delete();
 
@@ -660,16 +671,6 @@ class VacationPlanner extends Component
             }
         }
 
-        $currentUser = $this->currentUserQuery()->first();
-
-        if ($currentUser !== null) {
-            $this->currentUserId = $currentUser->id;
-            session(['current_user_id' => $currentUser->id]);
-            $this->resolvedCurrentUserRecord = $currentUser;
-
-            return $this->resolvedCurrentUserRecord;
-        }
-
         $this->currentUserId = null;
         session()->forget('current_user_id');
         $this->resolvedCurrentUserRecord = null;
@@ -681,7 +682,7 @@ class VacationPlanner extends Component
     {
         return User::query()
             ->active()
-            ->select(['id', 'department_id', 'manager_id', 'name', 'location', 'holiday_country', 'theme_preference'])
+            ->select(['id', 'department_id', 'manager_id', 'name', 'email', 'location', 'holiday_country', 'theme_preference', 'is_admin'])
             ->with([
                 'manager:id,name',
                 'department:id,name',

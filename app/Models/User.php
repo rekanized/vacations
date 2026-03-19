@@ -10,10 +10,30 @@ class User extends Model
     public const THEME_LIGHT = 'light';
     public const THEME_DARK = 'dark';
 
-    protected $fillable = ['department_id', 'manager_id', 'name', 'location', 'holiday_country', 'theme_preference', 'is_active'];
+    protected $fillable = [
+        'department_id',
+        'manager_id',
+        'name',
+        'first_name',
+        'last_name',
+        'email',
+        'azure_oid',
+        'password',
+        'location',
+        'holiday_country',
+        'theme_preference',
+        'is_admin',
+        'is_active',
+    ];
 
     protected $casts = [
+        'password' => 'hashed',
+        'is_admin' => 'bool',
         'is_active' => 'bool',
+    ];
+
+    protected $hidden = [
+        'password',
     ];
 
     public static function supportedThemePreferences(): array
@@ -29,9 +49,31 @@ class User extends Model
         return $this->theme_preference === self::THEME_DARK;
     }
 
+    public function fullName(): string
+    {
+        $fullName = trim(implode(' ', array_filter([$this->first_name, $this->last_name])));
+
+        return $fullName !== '' ? $fullName : $this->name;
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->is_admin;
+    }
+
+    public function isManualAccount(): bool
+    {
+        return filled($this->password) && blank($this->azure_oid);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    public function scopeAdmins(Builder $query): Builder
+    {
+        return $query->where('is_admin', true);
     }
 
     public function department(): \Illuminate\Database\Eloquent\Relations\BelongsTo

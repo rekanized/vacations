@@ -14,7 +14,7 @@ class AdminApplicationNameTest extends TestCase
     public function test_admin_can_update_the_application_name(): void
     {
         $department = Department::create(['name' => 'Engineering']);
-        $user = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm']);
+        $user = $department->users()->create(['name' => 'Asta Admin', 'location' => 'Stockholm', 'is_admin' => true]);
 
         $response = $this
             ->withSession(['current_user_id' => $user->id])
@@ -23,14 +23,14 @@ class AdminApplicationNameTest extends TestCase
             ]);
 
         $response
-            ->assertRedirect(route('admin.index'))
+            ->assertRedirect(route('admin.settings'))
             ->assertSessionHas('status', 'Application name updated.');
 
         $this->assertSame('Vacation Hub', Setting::valueFor('app_name'));
 
         $this
             ->withSession(['current_user_id' => $user->id])
-            ->get(route('admin.index'))
+            ->get(route('admin.settings'))
             ->assertOk()
             ->assertSee('Vacation Hub');
     }

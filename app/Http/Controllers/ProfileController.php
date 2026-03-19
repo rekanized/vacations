@@ -90,7 +90,7 @@ class ProfileController extends Controller
 
         return User::query()
             ->active()
-            ->select(['id', 'department_id', 'manager_id', 'name', 'location', 'holiday_country', 'theme_preference', 'is_active'])
+            ->select(['id', 'department_id', 'manager_id', 'name', 'email', 'location', 'holiday_country', 'theme_preference', 'is_admin', 'is_active'])
             ->with([
                 'department:id,name',
                 'manager:id,department_id,name,location',
