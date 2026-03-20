@@ -100,13 +100,21 @@ class AzureAuthenticationController extends Controller
                 ->first();
 
             if ($existingUser !== null) {
-                $existingUser->update([
-                    'department_id' => $department->id,
+                $updates = [
                     'name' => $identity['name'],
                     'email' => $identity['email'],
                     'azure_oid' => $identity['azure_oid'],
-                    'location' => trim((string) ($identity['site_name'] ?? 'Unassigned')) ?: 'Unassigned',
-                ]);
+                ];
+
+                if (! $existingUser->is_department_overridden) {
+                    $updates['department_id'] = $department->id;
+                }
+
+                if (! $existingUser->is_location_overridden) {
+                    $updates['location'] = trim((string) ($identity['site_name'] ?? 'Unassigned')) ?: 'Unassigned';
+                }
+
+                $existingUser->update($updates);
 
                 return $existingUser->refresh();
             }

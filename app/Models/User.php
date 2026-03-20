@@ -24,12 +24,16 @@ class User extends Model
         'theme_preference',
         'is_admin',
         'is_active',
+        'is_department_overridden',
+        'is_location_overridden',
     ];
 
     protected $casts = [
         'password' => 'hashed',
         'is_admin' => 'bool',
         'is_active' => 'bool',
+        'is_department_overridden' => 'bool',
+        'is_location_overridden' => 'bool',
     ];
 
     protected $hidden = [

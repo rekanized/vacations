@@ -39,6 +39,7 @@ Route::middleware('azure-auth')->group(function () {
 		Route::post('/azure-auth', [AdminController::class, 'updateAzureConfiguration'])->name('azure-auth.update');
 		Route::post('/manual-users', [AdminController::class, 'storeManualUser'])->name('manual-users.store');
 		Route::post('/users/{user}/impersonate', [AdminController::class, 'impersonateUser'])->name('users.impersonate');
+		Route::patch('/users/{user}', [AdminController::class, 'updateUser'])->name('users.update');
 		Route::patch('/users/{user}/activity', [AdminController::class, 'updateUserActivity'])->name('users.activity');
 		Route::patch('/users/{user}/admin', [AdminController::class, 'updateUserAdmin'])->name('users.admin');
 		Route::patch('/users/{user}/manager', [AdminController::class, 'updateUserManager'])->name('users.manager');

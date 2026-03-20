@@ -445,7 +445,7 @@ body.app-body {
 }
 
 .page-shell-admin {
-    max-width: 1200px;
+    max-width: none;
 }
 
 .guest-shell {
@@ -2232,7 +2232,21 @@ body[data-theme='dark'] .admin-azure-stat {
     height: 18px;
 }
 
-.admin-user-actions,
+.admin-user-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.admin-action-form {
+    display: flex;
+    margin: 0;
+    gap: 8px;
+    align-items: center;
+}
+
 .admin-user-copy {
     display: flex;
     flex-direction: column;

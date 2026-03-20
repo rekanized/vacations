@@ -197,7 +197,7 @@
 
                             <label class="admin-label">
                                 Password
-                                <input type="password" name="password" class="admin-input" placeholder="At least 12 characters">
+                                <input type="password" name="password" class="admin-input" placeholder="At least 6 characters">
                             </label>
 
                             <label class="admin-label">

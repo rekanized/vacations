@@ -77,7 +77,7 @@ class AdminController extends Controller
         ];
 
         $users = User::query()
-            ->select(['id', 'department_id', 'manager_id', 'name', 'email', 'azure_oid', 'password', 'location', 'theme_preference', 'is_admin', 'is_active'])
+            ->select(['id', 'department_id', 'manager_id', 'name', 'email', 'azure_oid', 'password', 'location', 'theme_preference', 'is_admin', 'is_active', 'is_department_overridden', 'is_location_overridden'])
             ->with(['department:id,name', 'manager:id,name'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($searchQuery) use ($search) {
@@ -413,13 +413,54 @@ class AdminController extends Controller
             ->with('status', sprintf('%s now reports to %s.', $user->name, $managerName));
     }
 
+    public function updateUser(Request $request, User $user): RedirectResponse
+    {
+        $departmentOptions = Department::query()->pluck('name')->toArray();
+        $managerOptions = User::query()->where('is_active', true)->pluck('id')->toArray();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'department_name' => ['nullable', 'string', 'max:100'],
+            'location' => ['nullable', 'string', 'max:100'],
+            'is_department_overridden' => ['nullable', 'boolean'],
+            'is_location_overridden' => ['nullable', 'boolean'],
+            'manager_id' => [
+                'nullable',
+                Rule::in($managerOptions),
+            ],
+            'is_admin' => ['nullable', 'boolean'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $department = Department::query()->firstOrCreate([
+            'name' => trim($validated['department_name'] ?: 'Unassigned'),
+        ]);
+
+        $user->update([
+            'name' => $validated['name'],
+            'email' => mb_strtolower(trim($validated['email'])),
+            'department_id' => $department->id,
+            'location' => trim($validated['location'] ?: 'Unassigned'),
+            'is_department_overridden' => (bool) ($validated['is_department_overridden'] ?? false),
+            'is_location_overridden' => (bool) ($validated['is_location_overridden'] ?? false),
+            'manager_id' => $validated['manager_id'] ?: null,
+            'is_admin' => (bool) ($validated['is_admin'] ?? false),
+            'is_active' => (bool) ($validated['is_active'] ?? false),
+        ]);
+
+        return redirect()
+            ->route('admin.users')
+            ->with('status', sprintf('User %s updated.', $user->name));
+    }
+
     public function storeManualUser(Request $request): RedirectResponse
     {
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'max:255', 'confirmed', Password::min(12)],
+            'password' => ['required', 'string', 'max:255', 'confirmed', Password::min(6)],
             'department_name' => ['nullable', 'string', 'max:100'],
             'location' => ['nullable', 'string', 'max:100'],
             'manager_id' => [

@@ -25,15 +25,31 @@
 @endphp
 
 <div
-    class="page-shell page-shell-admin"
-    x-data="{ isManualUserModalOpen: @js($manualUserModalShouldOpen) }"
+    class="page-shell page-shell-fluid"
+    x-data="{ 
+        isManualUserModalOpen: @js($manualUserModalShouldOpen),
+        isEditUserModalOpen: false,
+        editingUser: {
+            id: null,
+            name: '',
+            email: '',
+            department_name: '',
+            location: '',
+            is_department_overridden: false,
+            is_location_overridden: false,
+            manager_id: '',
+            is_admin: false,
+            is_active: false,
+            is_manual: false
+        }
+    }"
     x-effect="if (isManualUserModalOpen) { $nextTick(() => $refs.manualUserFirstName?.focus()) }"
 >
     <section class="admin-card admin-stack">
         <div>
             <p class="planner-kicker">Admin workspace</p>
             <h1 style="font-size: 28px; margin-bottom: 12px;">User information</h1>
-            <p style="color: var(--text-soft); max-width: 760px; margin: 0;">
+            <p style="color: var(--text-soft); margin: 0;">
                 Manage manual accounts, review who can access the application, impersonate another user for support work, and control admin permissions without mixing those tasks into application configuration.
             </p>
         </div>
@@ -116,7 +132,7 @@
         <div class="admin-user-toolbar">
             <div class="admin-user-heading">
                 <h2>Users and permissions</h2>
-                <p style="color: var(--text-soft); max-width: 760px;">New Azure users are created automatically on first sign-in. Create manual email/password accounts here when Azure is not available for everyone, then manage access, reporting lines, and admin permissions in one place.</p>
+                <p style="color: var(--text-soft);">New Azure users are created automatically on first sign-in. Create manual email/password accounts here when Azure is not available for everyone, then manage access, reporting lines, and admin permissions in one place.</p>
             </div>
 
             <button type="button" class="admin-button" @click="isManualUserModalOpen = true">Create manual user</button>
@@ -136,8 +152,8 @@
             <tbody>
                 @foreach ($users as $user)
                     @php
-                        $canDeactivate = $user->is_active && $activeUserCount > 1;
-                        $canRevokeAdmin = $user->is_admin && $adminCount > 1;
+                        $isImpersonating = session()->has('impersonator_user_id');
+                        $isCurrentUser = $currentUser && $currentUser->id === $user->id;
                     @endphp
                     <tr class="admin-user-row {{ $user->is_active ? '' : 'inactive' }}">
                         <td>
@@ -147,36 +163,7 @@
                             </div>
                         </td>
                         <td>{{ $user->department?->name ?? '—' }}</td>
-                        <td>
-                            <div class="admin-user-copy">
-                                <span>{{ $user->manager?->name ?? 'No manager' }}</span>
-
-                                @if ($user->isManualAccount())
-                                    <form method="POST" action="{{ route('admin.users.manager', $user) }}" class="admin-form admin-user-manager-form">
-                                        @csrf
-                                        @method('PATCH')
-
-                                        <label class="admin-label" for="manager-id-{{ $user->id }}">
-                                            <span class="admin-helper-text">Assign manager</span>
-                                            <select id="manager-id-{{ $user->id }}" name="manager_id" class="admin-select">
-                                                <option value="">No manager</option>
-                                                @foreach ($managerOptions as $managerOption)
-                                                    @if ($managerOption->id !== $user->id && $managerOption->is_active)
-                                                        <option value="{{ $managerOption->id }}" @selected($user->manager_id === $managerOption->id)>
-                                                            {{ $managerOption->name }}
-                                                        </option>
-                                                    @endif
-                                                @endforeach
-                                            </select>
-                                        </label>
-
-                                        <button type="submit" class="admin-button secondary">Save manager</button>
-                                    </form>
-                                @else
-                                    <span class="admin-helper-text">Managed from Azure profile data</span>
-                                @endif
-                            </div>
-                        </td>
+                        <td>{{ $user->manager?->name ?? '—' }}</td>
                         <td>
                             <span class="admin-chip {{ $user->is_admin ? 'success' : '' }}">
                                 {{ $user->is_admin ? 'Admin' : 'Standard' }}
@@ -189,58 +176,39 @@
                         </td>
                         <td>
                             <div class="admin-user-actions">
-                                <form method="POST" action="{{ route('admin.users.admin', $user) }}" class="admin-form" style="gap: 8px;">
-                                    @csrf
-                                    @method('PATCH')
+                                <button
+                                    type="button"
+                                    class="admin-button"
+                                    @click="
+                                        editingUser = {
+                                            id: {{ $user->id }},
+                                            name: '{{ addslashes($user->name) }}',
+                                            email: '{{ addslashes($user->email) }}',
+                                            department_name: '{{ addslashes($user->department?->name ?? 'Unassigned') }}',
+                                            location: '{{ addslashes($user->location) }}',
+                                            is_department_overridden: {{ $user->is_department_overridden ? 'true' : 'false' }},
+                                            is_location_overridden: {{ $user->is_location_overridden ? 'true' : 'false' }},
+                                            manager_id: '{{ $user->manager_id ?? '' }}',
+                                            is_admin: {{ $user->is_admin ? 'true' : 'false' }},
+                                            is_active: {{ $user->is_active ? 'true' : 'false' }},
+                                            is_manual: {{ $user->isManualAccount() ? 'true' : 'false' }}
+                                        };
+                                        isEditUserModalOpen = true;
+                                    "
+                                >
+                                    Edit
+                                </button>
 
-                                    <button
-                                        type="submit"
-                                        class="admin-button {{ $user->is_admin ? 'secondary' : '' }}"
-                                        @disabled($user->is_admin && ! $canRevokeAdmin)
-                                    >
-                                        {{ $user->is_admin ? 'Remove admin' : 'Grant admin' }}
-                                    </button>
-
-                                    @if ($user->is_admin && ! $canRevokeAdmin)
-                                        <p class="admin-helper-text">At least one admin must remain.</p>
-                                    @endif
-                                </form>
-
-                                <form method="POST" action="{{ route('admin.users.impersonate', $user) }}" class="admin-form" style="gap: 8px;">
+                                <form method="POST" action="{{ route('admin.users.impersonate', $user) }}" class="admin-action-form">
                                     @csrf
 
                                     <button
                                         type="submit"
                                         class="admin-button secondary"
-                                        @disabled($isImpersonating || ! $user->is_active || ($currentUser && $currentUser->id === $user->id))
+                                        @disabled($isImpersonating || ! $user->is_active || $isCurrentUser)
                                     >
                                         Impersonate
                                     </button>
-
-                                    @if ($currentUser && $currentUser->id === $user->id)
-                                        <p class="admin-helper-text">Choose another user.</p>
-                                    @elseif ($isImpersonating)
-                                        <p class="admin-helper-text">Stop the current impersonation first.</p>
-                                    @elseif (! $user->is_active)
-                                        <p class="admin-helper-text">Only active users can be impersonated.</p>
-                                    @endif
-                                </form>
-
-                                <form method="POST" action="{{ route('admin.users.activity', $user) }}" class="admin-form" style="gap: 8px;">
-                                    @csrf
-                                    @method('PATCH')
-
-                                    <button
-                                        type="submit"
-                                        class="admin-button {{ $user->is_active ? 'secondary' : '' }}"
-                                        @disabled($user->is_active && ! $canDeactivate)
-                                    >
-                                        {{ $user->is_active ? 'Mark inactive' : 'Reactivate' }}
-                                    </button>
-
-                                    @if ($user->is_active && ! $canDeactivate)
-                                        <p class="admin-helper-text">At least one active user must remain.</p>
-                                    @endif
                                 </form>
                             </div>
                         </td>
@@ -315,7 +283,7 @@
 
                             <label class="admin-label">
                                 Password
-                                <input type="password" name="password" class="admin-input" placeholder="At least 12 characters" autocomplete="new-password">
+                                <input type="password" name="password" class="admin-input" placeholder="At least 6 characters" autocomplete="new-password">
                                 @error('password')
                                     <span class="admin-field-error">{{ $message }}</span>
                                 @enderror
@@ -407,6 +375,117 @@
             <option value="{{ $departmentOption }}"></option>
         @endforeach
     </datalist>
+    {{-- Edit User Modal --}}
+    <div
+        class="modal-overlay"
+        x-show="isEditUserModalOpen"
+        x-cloak
+        x-transition
+        x-on:keydown.escape.window="isEditUserModalOpen = false"
+    >
+        <div
+            class="modal-content admin-manual-user-modal"
+            style="width: min(600px, 100% - 32px); max-width: none;"
+            @click.away="isEditUserModalOpen = false"
+            @click.stop
+        >
+            <div class="request-edit-modal-head">
+                <div>
+                    <p class="planner-kicker" style="margin-bottom: 8px;">User management</p>
+                    <h2 class="modal-title">Edit User</h2>
+                </div>
+                <button type="button" class="admin-button secondary request-edit-close" @click="isEditUserModalOpen = false">Close</button>
+            </div>
+
+            <form method="POST" x-bind:action="'{{ route('admin.users.update', ['user' => 'ID_PLACEHOLDER']) }}'.replace('ID_PLACEHOLDER', editingUser.id)" class="admin-stack">
+                @csrf
+                @method('PATCH')
+
+                <div class="admin-form" style="grid-template-columns: 1fr 1fr;">
+                    <label class="admin-label">
+                        <span>Full name</span>
+                        <input type="text" name="name" x-model="editingUser.name" class="admin-input" required>
+                    </label>
+
+                    <label class="admin-label">
+                        <span>Email address</span>
+                        <input type="email" name="email" x-model="editingUser.email" class="admin-input" required>
+                    </label>
+                </div>
+
+                <div class="admin-form" style="grid-template-columns: 1fr 1fr;">
+                    <div class="admin-stack" style="gap: 8px;">
+                        <label class="admin-label">
+                            <span>Department</span>
+                            <div style="display: flex; gap: 8px;">
+                                <input 
+                                    type="text" 
+                                    name="department_name" 
+                                    x-model="editingUser.department_name" 
+                                    class="admin-input" 
+                                    list="department-name-options"
+                                    placeholder="Search or add..."
+                                >
+                            </div>
+                        </label>
+                        <template x-if="!editingUser.is_manual">
+                            <label class="admin-checkbox-label">
+                                <input type="checkbox" name="is_department_overridden" x-model="editingUser.is_department_overridden" value="1">
+                                <span class="admin-helper-text">Override Azure department</span>
+                            </label>
+                        </template>
+                    </div>
+
+                    <div class="admin-stack" style="gap: 8px;">
+                        <label class="admin-label">
+                            <span>Location / Site</span>
+                            <input type="text" name="location" x-model="editingUser.location" class="admin-input" placeholder="e.g. Stockholm">
+                        </label>
+                        <template x-if="!editingUser.is_manual">
+                            <label class="admin-checkbox-label">
+                                <input type="checkbox" name="is_location_overridden" x-model="editingUser.is_location_overridden" value="1">
+                                <span class="admin-helper-text">Override Azure location</span>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+
+                <label class="admin-label">
+                    <span>Manager</span>
+                    <select name="manager_id" x-model="editingUser.manager_id" class="admin-select">
+                        <option value="">No manager</option>
+                        @foreach ($managerOptions as $managerOption)
+                            <option value="{{ $managerOption->id }}" x-show="editingUser.id != @js($managerOption->id)">{{ $managerOption->name }}</option>
+                        @endforeach
+                    </select>
+                    <p class="admin-helper-text">Determines who approves leave requests.</p>
+                </label>
+
+                <div class="admin-form" style="grid-template-columns: 1fr 1fr;">
+                    <label class="admin-checkbox-label">
+                        <input type="checkbox" name="is_admin" x-model="editingUser.is_admin" value="1">
+                        <div class="admin-stack" style="gap: 2px;">
+                            <strong>Administrator access</strong>
+                            <span class="admin-helper-text">Can manage users and application settings.</span>
+                        </div>
+                    </label>
+
+                    <label class="admin-checkbox-label">
+                        <input type="checkbox" name="is_active" x-model="editingUser.is_active" value="1">
+                        <div class="admin-stack" style="gap: 2px;">
+                            <strong>Active account</strong>
+                            <span class="admin-helper-text">Deactivated users cannot sign in.</span>
+                        </div>
+                    </label>
+                </div>
+
+                <div class="modal-actions request-edit-modal-actions">
+                    <button type="button" class="admin-button secondary" @click="isEditUserModalOpen = false">Cancel</button>
+                    <button type="submit" class="admin-button">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 </x-layouts.app>

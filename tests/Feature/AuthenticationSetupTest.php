@@ -42,8 +42,8 @@ class AuthenticationSetupTest extends TestCase
             'first_name' => 'Asta',
             'last_name' => 'Admin',
             'email' => 'asta@example.test',
-            'password' => 'shortpass',
-            'password_confirmation' => 'shortpass',
+            'password' => '12345',
+            'password_confirmation' => '12345',
         ]);
 
         $response
@@ -247,8 +247,8 @@ class AuthenticationSetupTest extends TestCase
                 'first_name' => 'Nils',
                 'last_name' => 'Newman',
                 'email' => 'nils@example.test',
-                'password' => 'shortpass',
-                'password_confirmation' => 'shortpass',
+                'password' => '12345',
+                'password_confirmation' => '12345',
             ]);
 
         $response
@@ -280,18 +280,18 @@ class AuthenticationSetupTest extends TestCase
                 'first_name' => 'Nils',
                 'last_name' => 'Newman',
                 'email' => 'nils@example.test',
-                'password' => 'shortpass',
-                'password_confirmation' => 'shortpass',
+                'password' => '12345',
+                'password_confirmation' => '12345',
             ]);
 
         $response
             ->assertOk()
             ->assertSee('isManualUserModalOpen: true', false)
-            ->assertSeeText('The password field must be at least 12 characters.');
+            ->assertSeeText('The password field must be at least 6 characters.');
 
         $this->assertSame(
             1,
-            substr_count($response->getContent(), 'The password field must be at least 12 characters.')
+            substr_count($response->getContent(), 'The password field must be at least 6 characters.')
         );
     }
 
@@ -462,6 +462,69 @@ class AuthenticationSetupTest extends TestCase
             ->withSession(['current_user_id' => $inactiveUser->id])
             ->get(route('planner'))
             ->assertRedirect(route('home'));
+    }
+
+    public function test_azure_sign_in_respects_department_and_location_overrides(): void
+    {
+        Setting::writeValue('azure_auth_tenant_id', '11111111-1111-1111-1111-111111111111');
+        Setting::writeValue('azure_auth_client_id', '22222222-2222-2222-2222-222222222222');
+        Setting::writeEncryptedValue('azure_auth_client_secret', 'super-secret-value');
+
+        $originalDepartment = Department::create(['name' => 'Original Dept']);
+        $overriddenDepartment = Department::create(['name' => 'Overridden Dept']);
+
+        $user = $originalDepartment->users()->create([
+            'name' => 'Azure Person',
+            'email' => 'azure@example.test',
+            'azure_oid' => 'azure-user-oid',
+            'location' => 'Original Location',
+            'is_department_overridden' => true,
+            'is_location_overridden' => true,
+        ]);
+
+        $user->update(['department_id' => $overriddenDepartment->id, 'location' => 'Overridden Location']);
+
+        Http::fake([
+            'https://login.microsoftonline.com/*/oauth2/v2.0/token' => Http::response([
+                'id_token' => $this->fakeJwt([
+                    'oid' => 'azure-user-oid',
+                    'name' => 'Azure Person',
+                    'preferred_username' => 'azure@example.test',
+                    'aud' => '22222222-2222-2222-2222-222222222222',
+                    'iss' => 'https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0',
+                    'tid' => '11111111-1111-1111-1111-111111111111',
+                    'nonce' => 'expected-nonce',
+                    'exp' => now()->addMinutes(10)->timestamp,
+                ]),
+                'access_token' => 'graph-access-token',
+            ]),
+            'https://graph.microsoft.com/v1.0/me*' => Http::response([
+                'id' => 'azure-user-oid',
+                'displayName' => 'Azure Person',
+                'mail' => 'azure@example.test',
+                'companyName' => 'New Sync Dept', // Different from DB
+                'city' => 'New Sync Location',     // Different from DB
+            ]),
+        ]);
+
+        $this->withSession([
+            'azure_auth_state' => 'expected-state',
+            'azure_auth_nonce' => 'expected-nonce',
+        ])->get(route('auth.azure.callback', [
+            'state' => 'expected-state',
+            'code' => 'valid-auth-code',
+        ]))->assertRedirect(route('planner'));
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'department_id' => $overriddenDepartment->id,
+            'location' => 'Overridden Location',
+        ]);
+
+        $this->assertDatabaseMissing('users', [
+            'id' => $user->id,
+            'location' => 'New Sync Location',
+        ]);
     }
 
     private function fakeJwt(array $payload): string

@@ -148,7 +148,7 @@
                     </form>
                 @endif
 
-                <a href="https://github.com/rekanized/vacations" class="sidebar-footer-link" target="_blank" rel="noopener noreferrer">
+                <a href="https://github.com/rekanized/absenceboard" class="sidebar-footer-link" target="_blank" rel="noopener noreferrer">
                     <span class="icon">code</span>
                     <span>GitHub repository</span>
                 </a>
