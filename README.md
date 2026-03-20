@@ -1,16 +1,10 @@
-<p align="center">
-  <img src="public/brand/absenceboard-mark.svg" alt="AbsenceBoard logo" width="88" height="88">
-</p>
+# AbsenceBoard
 
-<h1 align="center">AbsenceBoard</h1>
+![AbsenceBoard logo](public/brand/absenceboard-mark.svg)
 
-<p align="center">
-  A premium, handcrafted Laravel application for team leave planning and availability visualization.
-</p>
+A premium, handcrafted Laravel application for team leave planning and availability visualization.
 
-<p align="center">
-  <a href="https://buymeacoffee.com/rekanized"><b>☕ Buy me a coffee</b></a>
-</p>
+[☕ Buy me a coffee](https://buymeacoffee.com/rekanized)
 
 ---
 
@@ -66,7 +60,6 @@ For detailed guides, please refer to:
 - [Authentication Setup](GEMINI.md#authentication)
 - [Local Development Guide](GEMINI.md#local-setup)
 - [Admin Workspace Details](GEMINI.md#admin-workspace)
-
 
 ## License
 
